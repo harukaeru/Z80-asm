@@ -1,27 +1,81 @@
-Z80-Assembler	Release 1.9	Sun Jul 10 17:25:49 2022	Page 1
-Source file: src/fizzbuzz.asm
+Z80-Assembler		Release 1.7				Page 1
+Source file: src/helloworld.asm
 Title:       
 
 LOC   OBJECT CODE   LINE   STMT SOURCE CODE
-                       1      1     ORG 8000H
+                       1      1     ORG 9000H
                        2      2 
-6000                   3      3 counter: EQU 6000H
+0000                   3      3 LOC_BEGIN: EQU 0H
                        4      4 
                        5      5 init
-8000  3e 01            6      6     LD A,1
-8002  ed 4b 00 60      7      7     LD BC,(counter)
-8006  c3 0a 80         8      8     JP loop
-8009  c9               9      9     RET
-                      10     10 loop
-800a  02              11     11     LD (BC),A
-800b  3c              12     12     INC A
-800c  03              13     13     INC BC
-800d  fe 63           14     14     CP 99
-800f  da 16 80        15     15     JP C, fizzend
-8012  c3 0a 80        16     16     JP loop
-8015  c9              17     17     RET
-                      18     18 fizzend
-8016  76              19     19     HALT
-8017  c9              20     20     RET
-                      21     21 
-8018                  22     22     END
+9000  01 00 00         6      6     LD BC, LOC_BEGIN
+9003  16 00            7      7     LD D, 0
+9005  c3 09 90         8      8     JP loop
+9008  c9               9      9     RET
+                      10     10 
+                      11     11 loop
+9009  3e 48           12     12     LD A,'H'
+900b  02              13     13     LD (BC),A
+900c  03              14     14     INC BC
+                      15     15     
+900d  3e 65           16     16     LD A,'e'
+900f  02              17     17     LD (BC),A
+9010  03              18     18     INC BC
+                      19     19     
+9011  3e 6c           20     20     LD A,'l'
+9013  02              21     21     LD (BC),A
+9014  03              22     22     INC BC
+                      23     23 
+9015  3e 6c           24     24     LD A,'l'
+9017  02              25     25     LD (BC),A
+9018  03              26     26     INC BC
+                      27     27 
+9019  3e 6f           28     28     LD A,'o'
+901b  02              29     29     LD (BC),A
+901c  03              30     30     INC BC
+                      31     31 
+901d  3e 2c           32     32     LD A,','
+901f  02              33     33     LD (BC),A
+9020  03              34     34     INC BC
+                      35     35 
+9021  3e 20           36     36     LD A,' '
+9023  02              37     37     LD (BC),A
+9024  03              38     38     INC BC
+                      39     39 
+9025  3e 57           40     40     LD A,'W'
+9027  02              41     41     LD (BC),A
+9028  03              42     42     INC BC
+                      43     43 
+9029  3e 6f           44     44     LD A,'o'
+902b  02              45     45     LD (BC),A
+902c  03              46     46     INC BC
+                      47     47 
+902d  3e 72           48     48     LD A,'r'
+902f  02              49     49     LD (BC),A
+9030  03              50     50     INC BC
+                      51     51 
+9031  3e 6c           52     52     LD A,'l'
+9033  02              53     53     LD (BC),A
+9034  03              54     54     INC BC
+                      55     55 
+9035  3e 64           56     56     LD A,'d'
+9037  02              57     57     LD (BC),A
+9038  03              58     58     INC BC
+                      59     59 
+9039  3e 21           60     60     LD A,'!'
+Z80-Assembler		Release 1.7				Page 2
+Source file: src/helloworld.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+903b  02              61     61     LD (BC),A
+903c  03              62     62     INC BC
+                      63     63 
+903d  14              64     64     INC D
+903e  7a              65     65     LD A,D
+903f  fe 64           66     66     CP 100
+9041  da 09 90        67     67     JP C,loop
+                      68     68 
+9044  c9              69     69     RET
+                      70     70 
+9045                  71     71     END
