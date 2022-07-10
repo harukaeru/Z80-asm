@@ -1,17 +1,27 @@
-Z80-Assembler	Release 1.9	Sun Jul  3 18:21:04 2022	Page 1
-Source file: src/file1.asm
+Z80-Assembler	Release 1.9	Sun Jul 10 17:25:49 2022	Page 1
+Source file: src/fizzbuzz.asm
 Title:       
 
 LOC   OBJECT CODE   LINE   STMT SOURCE CODE
-                       1      1 ; 99 Bottles of Beer program in Zilgo Z80 assembly language.
+                       1      1     ORG 8000H
                        2      2 
-                       3      3      org 1000
+6000                   3      3 counter: EQU 6000H
                        4      4 
-0000                   5      5 sum: EQU 0
-                       6      6 
-                       7      7 loop
-03e8  3e 05            8      8     LD a,5
-03ea  47               9      9     LD b,a
-03eb  80              10     10     ADD a,b
-03ec  32 00 00        11     11     LD (sum),a
-03ef                  12     12     END
+                       5      5 init
+8000  3e 01            6      6     LD A,1
+8002  ed 4b 00 60      7      7     LD BC,(counter)
+8006  c3 0a 80         8      8     JP loop
+8009  c9               9      9     RET
+                      10     10 loop
+800a  02              11     11     LD (BC),A
+800b  3c              12     12     INC A
+800c  03              13     13     INC BC
+800d  fe 63           14     14     CP 99
+800f  da 16 80        15     15     JP C, fizzend
+8012  c3 0a 80        16     16     JP loop
+8015  c9              17     17     RET
+                      18     18 fizzend
+8016  76              19     19     HALT
+8017  c9              20     20     RET
+                      21     21 
+8018                  22     22     END
