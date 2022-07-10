@@ -1,0 +1,17 @@
+Z80-Assembler	Release 1.9	Sun Jul  3 18:21:04 2022	Page 1
+Source file: src/file1.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1      1 ; 99 Bottles of Beer program in Zilgo Z80 assembly language.
+                       2      2 
+                       3      3      org 1000
+                       4      4 
+0000                   5      5 sum: EQU 0
+                       6      6 
+                       7      7 loop
+03e8  3e 05            8      8     LD a,5
+03ea  47               9      9     LD b,a
+03eb  80              10     10     ADD a,b
+03ec  32 00 00        11     11     LD (sum),a
+03ef                  12     12     END

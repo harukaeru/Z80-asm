@@ -1,0 +1,928 @@
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 1
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1      1 ;
+                       2      2 ; this is a Z80 floating point package from an ancient german computer magazine
+                       3      3 ; I'm not going to translate this into english
+                       4      4 ; assemble this source with z80asm and run it under z80sim, if everything
+                       5      5 ; is working it should print the numbers below
+                       6      6 ;
+                       7      7 ; *******************************
+                       8      8 ; * Fliesskomma-Arithmetik fuer	*
+                       9      9 ; * den Z80-Mikroprozessor	*
+                      10     10 ; * (mc 12/88, Seite 100	*
+                      11     11 ; *******************************
+                      12     12 
+                      13     13 ; ********************************************************
+                      14     14 ; * Die folgende Testroutine liefert die Ausgabe:
+                      15     15 ; *	40400000
+                      16     16 ; *	00700000
+                      17     17 ; *	7F800000
+                      18     18 ; *	35BFFFFF
+                      19     19 ; *	00400000
+                      20     20 ; *	7F7FFFFF
+                      21     21 ; *	7F800000
+                      22     22 ; *	406DB6DB
+                      23     23 ; *	15400001
+                      24     24 
+                      25     25 START:
+0000  31 2e 01        26     26 	LD	SP,STACK
+0003  01 80 3f        27     27 	LD	BC,3F80H	; Aufruf der Additionsroutine
+0006  11 00 00        28     28 	LD	DE,0000H	; mit verschiedenen Parametern
+0009  c5              29     29 	PUSH	BC		; entspricht 1 + 2
+000a  d5              30     30 	PUSH	DE
+000b  01 00 40        31     31 	LD	BC,4000H
+000e  11 00 00        32     32 	LD	DE,0000H
+0011  c5              33     33 	PUSH	BC
+0012  d5              34     34 	PUSH	DE
+0013  cd 69 01        35     35 	CALL	F_ADD
+0016  cd 2e 01        36     36 	CALL	HEXOUT		; anschliessend Ausgabe
+                      37     37 
+0019  01 f0 00        38     38 	LD	BC,00F0H	; eine kleine, gerade noch normalisierte
+001c  11 00 00        39     39 	LD	DE,0000H	; Zahl, dazu die kleinste normalisierte
+001f  c5              40     40 	PUSH	BC		; Zahl mit negativem Vorzeichen addieren
+0020  d5              41     41 	PUSH	DE
+0021  01 80 80        42     42 	LD	BC,8080H
+0024  11 00 00        43     43 	LD	DE,0000H
+0027  c5              44     44 	PUSH	BC
+0028  d5              45     45 	PUSH	DE
+0029  cd 69 01        46     46 	CALL	F_ADD
+002c  cd 2e 01        47     47 	CALL	HEXOUT
+                      48     48 
+002f  01 00 7f        49     49 	LD	BC,7F00H	; die Summe dieser beiden Zahlen
+0032  11 00 00        50     50 	LD	DE,0000H	; ergibt unendlich. Setzt man
+0035  c5              51     51 	PUSH	BC		; fuer die zweite Zahl den Wert
+0036  d5              52     52 	PUSH	DE		; 7EFFFFFE, so ist das Ergebnis
+0037  01 ff 7e        53     53 	LD	BC,7EFFH	; gerade MAXFLOAT
+003a  11 ff ff        54     54 	LD	DE,0FFFFH
+003d  c5              55     55 	PUSH	BC
+003e  d5              56     56 	PUSH	DE
+003f  cd 69 01        57     57 	CALL	F_ADD
+0042  cd 2e 01        58     58 	CALL	HEXOUT
+                      59     59 
+0045  01 00 00        60     60 	LD	BC,0000H	; Multiplikation testen
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 2
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0048  11 03 00        61     61 	LD	DE,0003H	; MAXFLOAT * <denormalisierte Zahl>
+004b  c5              62     62 	PUSH	BC
+004c  d5              63     63 	PUSH	DE
+004d  01 7f 7f        64     64 	LD	BC,7F7FH
+0050  11 ff ff        65     65 	LD	DE,0FFFFH
+0053  c5              66     66 	PUSH	BC
+0054  d5              67     67 	PUSH	DE
+0055  cd 47 03        68     68 	CALL	F_MUL
+0058  cd 2e 01        69     69 	CALL	HEXOUT
+                      70     70 
+005b  01 80 00        71     71 	LD	BC,0080H	; die kleinste normalisierte Zahl
+005e  11 00 00        72     72 	LD	DE,0000H	; mit 0.5 multiplizieren
+0061  c5              73     73 	PUSH	BC		; (ergibt eine denormalisierte Zahl)
+0062  d5              74     74 	PUSH	DE
+0063  01 00 3f        75     75 	LD	BC,3F00H
+0066  11 00 00        76     76 	LD	DE,0000H
+0069  c5              77     77 	PUSH	BC
+006a  d5              78     78 	PUSH	DE
+006b  cd 47 03        79     79 	CALL	F_MUL
+006e  cd 2e 01        80     80 	CALL	HEXOUT
+                      81     81 
+0071  01 00 40        82     82 	LD	BC,4000H	; eine sehr grosse Zahl mit zwei
+0074  11 00 00        83     83 	LD	DE,0000H	; multiplizieren. Das Ergebnis
+0077  c5              84     84 	PUSH	BC		; ist genau MAXFLOAT
+0078  d5              85     85 	PUSH	DE
+0079  01 ff 7e        86     86 	LD	BC,7EFFH
+007c  11 ff ff        87     87 	LD	DE,0FFFFH
+007f  c5              88     88 	PUSH	BC
+0080  d5              89     89 	PUSH	DE
+0081  cd 47 03        90     90 	CALL	F_MUL
+0084  cd 2e 01        91     91 	CALL	HEXOUT
+                      92     92 
+0087  01 00 00        93     93 	LD	BC,0000H	; Test der Divisionsroutine
+008a  11 00 00        94     94 	LD	DE,0000H	; hier 1 / 0 (ergibt unendlich)
+008d  c5              95     95 	PUSH	BC
+008e  d5              96     96 	PUSH	DE
+008f  01 80 3f        97     97 	LD	BC,3F80H
+0092  11 00 00        98     98 	LD	DE,0000H
+0095  c5              99     99 	PUSH	BC
+0096  d5             100    100 	PUSH	DE
+0097  cd 04 05       101    101 	CALL	F_DIV
+009a  cd 2e 01       102    102 	CALL	HEXOUT
+                     103    103 
+009d  01 e0 40       104    104 	LD	BC,40E0H	; jetzt 26 / 7 berechnen
+00a0  11 00 00       105    105 	LD	DE,0000H
+00a3  c5             106    106 	PUSH	BC
+00a4  d5             107    107 	PUSH	DE
+00a5  01 d0 41       108    108 	LD	BC,41D0H
+00a8  11 00 00       109    109 	LD	DE,0000H
+00ab  c5             110    110 	PUSH	BC
+00ac  d5             111    111 	PUSH	DE
+00ad  cd 04 05       112    112 	CALL	F_DIV
+00b0  cd 2e 01       113    113 	CALL	HEXOUT
+                     114    114 
+00b3  01 ff 1f       115    115 	LD	BC,1FFFH	; jetzt eine sehr kleine
+00b6  11 ff ff       116    116 	LD	DE,0FFFFH	; denormalisierte Zahl durch
+00b9  c5             117    117 	PUSH	BC		; eine kleine normalisierte
+00ba  d5             118    118 	PUSH	DE		; Zahl dividieren
+00bb  01 00 00       119    119 	LD	BC,0000H
+00be  11 03 00       120    120 	LD	DE,0003H
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 3
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+00c1  c5             121    121 	PUSH	BC
+00c2  d5             122    122 	PUSH	DE
+00c3  cd 04 05       123    123 	CALL	F_DIV
+00c6  cd 2e 01       124    124 	CALL	HEXOUT
+                     125    125 
+00c9  76             126    126 	HALT			; Ende des Tests
+                     127    127 
+00ca                 128    128 	DEFS	100
+                     129    129 STACK:
+                     130    130 
+                     131    131 ; ************************************************
+                     132    132 ; * Zahl in BC-DE in 8 Hexadezimalziffern drucken.
+                     133    133 ; * Dazu werden nacheinander die Nibble-Paare in
+                     134    134 ; * B, C, D und E ausgedruckt.
+                     135    135 ; *
+                     136    136 
+                     137    137 HEXOUT:
+012e  78             138    138 	LD	A,B		; Nacheinander die einzelnen
+012f  cd 49 01       139    139 	CALL	DIG2		; Nibble-Paare in A laden
+0132  79             140    140 	LD	A,C		; und ausdrucken
+0133  cd 49 01       141    141 	CALL	DIG2
+0136  7a             142    142 	LD	A,D
+0137  cd 49 01       143    143 	CALL	DIG2
+013a  7b             144    144 	LD	A,E
+013b  cd 49 01       145    145 	CALL	DIG2
+013e  3e 0a          146    146 	LD	A,10
+0140  cd 66 01       147    147 	CALL	OUTCHAR
+0143  3e 0d          148    148 	LD	A,13
+0145  cd 66 01       149    149 	CALL	OUTCHAR
+0148  c9             150    150 	RET
+                     151    151 
+                     152    152 DIG2:
+0149  f5             153    153 	PUSH	AF		; Nibble-Paar ausdrucken
+014a  0f             154    154 	RRCA			; unterstes Nibble retten
+014b  0f             155    155 	RRCA			; oberes Nibble rechtsbuendig
+014c  0f             156    156 	RRCA			; positionieren
+014d  0f             157    157 	RRCA
+014e  e6 0f          158    158 	AND	00001111B
+0150  c6 90          159    159 	ADD	A,90H		; binaer in ASCII (hex)
+0152  27             160    160 	DAA
+0153  ce 40          161    161 	ADC	A,40H
+0155  27             162    162 	DAA
+0156  cd 66 01       163    163 	CALL	OUTCHAR		; Zeichen ausgeben
+0159  f1             164    164 	POP	AF		; jetzt unteres Nibble verarbeiten
+015a  e6 0f          165    165 	AND	00001111B	; Nibble maskieren
+015c  c6 90          166    166 	ADD	A,90H		; binaer in ASCII (hex)
+015e  27             167    167 	DAA
+015f  ce 40          168    168 	ADC	A,40H
+0161  27             169    169 	DAA
+0162  cd 66 01       170    170 	CALL	OUTCHAR
+0165  c9             171    171 	RET
+                     172    172 
+                     173    173 OUTCHAR:			; Zeichen auf Console ausgeben
+0166  d3 01          174    174 	OUT	(1),A
+0168  c9             175    175 	RET
+                     176    176 
+                     177    177 ; **********************************
+                     178    178 ; * Globale Konstanten-Definitionen
+                     179    179 ; * fuer das Fliesskommapaket
+                     180    180 ; *
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 4
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                     181    181 
+00ff                 182    182 MAXEXPO	EQU	255		; Maximal zulaessiger Exponent
+007f                 183    183 BIAS	EQU	127		; Bias des Exponenten
+                     184    184 
+                     185    185 ; *************************************************
+                     186    186 ; * Fliesskomma-Addition in Single-Precision
+                     187    187 ; * Parameter: Operand 1 und Operand 2 ueber Stack
+                     188    188 ; * Ergebnis:  in BC-DE: MSB in B, LSB in E
+                     189    189 ; *
+                     190    190 
+                     191    191 ; * Es folgen Offset-Definitionen fuer Stack-relativen Zugriff
+                     192    192 
+0000                 193    193 FHL_ALT	EQU	0		; Top of Stack liegt HL
+0002                 194    194 FADR	EQU	2		; dann die Ruecksprungadresse
+0004                 195    195 OP1	EQU	4		; jetzt Offset-Definitionen fuer
+0008                 196    196 OP2	EQU	8		; Parameter-Uebergabe
+                     197    197 
+0004                 198    198 OPSIZE	EQU	4		; Groesse eines Operanden
+                     199    199 
+                     200    200 F_ADD:
+0169  e5             201    201 	PUSH	HL		; alten Basepointer retten
+016a  ed 73 81 06    202    202 	LD	(F_STACK),SP	; aktuellen Stackpointer abspeichern
+016e  2a 81 06       203    203 	LD	HL,(F_STACK)	; und in HL laden (= Basepointer)
+0171  f5             204    204 	PUSH	AF		; benoetigte Register retten
+0172  dd e5          205    205 	PUSH	IX
+0174  fd e5          206    206 	PUSH	IY
+0176  01 04 00       207    207 	LD	BC,OP1		; jeztz die Zeiger auf die
+0179  09             208    208 	ADD	HL,BC		; Operanden initialisieren
+017a  e5             209    209 	PUSH	HL
+017b  dd e1          210    210 	POP	IX		; IX zeigt auf Operand 1
+017d  01 04 00       211    211 	LD	BC,OPSIZE
+0180  09             212    212 	ADD	HL,BC
+0181  e5             213    213 	PUSH	HL
+0182  fd e1          214    214 	POP	IY		; IY zeigt auf Operand 2
+                     215    215 F_ADSUB:
+0184  09             216    216 	ADD	HL,BC		; HL zeigt jetzt hinter die Operanden!
+0185  22 81 06       217    217 	LD	(F_STACK),HL	; diese Adresse fuer's Ende merken
+0188  dd 7e 03       218    218 	LD	A,(IX+3)	; Vorzeichen von Operand 1 laden
+018b  5f             219    219 	LD	E,A		; Ergebnisvorzeichen in E, Bit 7
+018c  fd ae 03       220    220 	XOR	(IY+3)		; mit Vorzeichen von OP2 verknuepfen
+018f  57             221    221 	LD	D,A		; Subtraktionsflag in D, Bit 7
+0190  dd cb 03 be    222    222 	RES	7,(IX+3)	; Vorzeichen in Mantisse 1 loeschen
+0194  fd cb 03 be    223    223 	RES	7,(IY+3)	; Vorzeichen in Mantisse 2 loeschen
+                     224    224 
+                     225    225 ; Die Operanden sind jetzt in der Form: 0EEE EEEE EFFF ... FFFF
+                     226    226 
+0198  dd 7e 00       227    227 	LD	A,(IX+0)	; Differenz OP1 - OP2 bilden
+019b  fd 96 00       228    228 	SUB	(IY+0)
+019e  dd 7e 01       229    229 	LD	A,(IX+1)
+01a1  fd 9e 01       230    230 	SBC	A,(IY+1)
+01a4  dd 7e 02       231    231 	LD	A,(IX+2)
+01a7  fd 9e 02       232    232 	SBC	A,(IY+2)
+01aa  dd 7e 03       233    233 	LD	A,(IX+3)
+01ad  fd 9e 03       234    234 	SBC	A,(IY+3)
+01b0  30 09          235    235 	JR	NC,FAD_1	; Sprung falls OP1 groesser als OP2
+01b2  dd e5          236    236 	PUSH	IX		; ansonsten Operanden vertauschen
+01b4  fd e3          237    237 	EX	(SP),IY		; (eigentlich nur die Pointer), so
+01b6  dd e1          238    238 	POP	IX		; dass IY den Kleineren adressiert
+01b8  7b             239    239 	LD	A,E		; Ergebnisvorzeichen neu berechnen
+01b9  aa             240    240 	XOR	D
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 5
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+01ba  5f             241    241 	LD	E,A
+                     242    242 FAD_1:
+01bb  dd 7e 02       243    243 	LD	A,(IX+2)
+01be  dd 4e 03       244    244 	LD	C,(IX+3)	; Exponent der groesseren Zahl laden
+01c1  cb 27          245    245 	SLA	A
+01c3  cb 11          246    246 	RL	C
+01c5  28 04          247    247 	JR	Z,AD_DN1
+01c7  dd cb 02 fe    248    248 	SET	7,(IX+2)	; implizite Eins erzeugen
+                     249    249 AD_DN1:
+01cb  fd 7e 02       250    250 	LD	A,(IY+2)
+01ce  fd 46 03       251    251 	LD	B,(IY+3)	; Exponent der kleineren Zahl laden
+01d1  cb 27          252    252 	SLA	A
+01d3  cb 10          253    253 	RL	B
+01d5  28 04          254    254 	JR	Z,AD_DN2
+01d7  fd cb 02 fe    255    255 	SET	7,(IY+2)	; implizite Eins erzeugen
+                     256    256 AD_DN2:
+01db  c5             257    257 	PUSH	BC		; Jetzt die Register fuer den
+01dc  d5             258    258 	PUSH	DE		; Blocktransferbefehl retten
+01dd  01 07 00       259    259 	LD	BC,(OPSIZE*2)-1 ; beide Operanden verschieben
+01e0  2b             260    260 	DEC	HL		; HL zeigt auf letztes Byte
+01e1  e5             261    261 	PUSH	HL		; HL nach DE kopieren
+01e2  d1             262    262 	POP	DE
+01e3  2b             263    263 	DEC	HL		; HL zeigt auf vorletztes Byte
+01e4  ed b8          264    264 	LDDR			; Verschiebung beider Mantissen
+01e6  d1             265    265 	POP	DE		; um 8 Bit nach links
+01e7  c1             266    266 	POP	BC
+01e8  af             267    267 	XOR	A
+01e9  dd 77 00       268    268 	LD	(IX+0),A	; Form: FFFF ... FFFF 0000 0000
+01ec  fd 77 00       269    269 	LD	(IY+0),A
+01ef  79             270    270 	LD	A,C		; Differenz der Exponenten berechnen
+01f0  90             271    271 	SUB	B
+01f1  47             272    272 	LD	B,A		; Differenz nach B fuer Loop-Befehl
+01f2  28 17          273    273 	JR	Z,AD_NAP	; falls Null, dann keine Anpassung
+01f4  fe 19          274    274 	CP	25		; mehr als 24? (Abfrage mit Carry
+01f6  d2 9b 02       275    275 	JP	NC,AD_RND	; erfordert Vergleich mit 25)
+                     276    276 AD_ANP:
+01f9  fd cb 03 3e    277    277 	SRL	(IY+3)		; Anpassung der zweiten Mantisse
+01fd  fd cb 02 1e    278    278 	RR	(IY+2)		; durch Verschiebung nach rechts
+0201  fd cb 01 1e    279    279 	RR	(IY+1)
+0205  fd cb 00 1e    280    280 	RR	(IY+0)
+0209  10 ee          281    281 	DJNZ	AD_ANP		; Loop-Befehl bis B = 0
+                     282    282 AD_NAP:
+020b  cb 7a          283    283 	BIT	7,D		; Subtraktion oder Addition?
+020d  20 39          284    284 	JR	NZ,SUBTR	; ggf. zur Subtraktion springen
+020f  dd 7e 00       285    285 	LD	A,(IX+0)	; jetzt werden die beiden Mantissen
+0212  fd 86 00       286    286 	ADD	A,(IY+0)	; zueinander addiert
+0215  dd 77 00       287    287 	LD	(IX+0),A
+0218  dd 7e 01       288    288 	LD	A,(IX+1)
+021b  fd 8e 01       289    289 	ADC	A,(IY+1)
+021e  dd 77 01       290    290 	LD	(IX+1),A
+0221  dd 7e 02       291    291 	LD	A,(IX+2)
+0224  fd 8e 02       292    292 	ADC	A,(IY+2)
+0227  dd 77 02       293    293 	LD	(IX+2),A
+022a  dd 7e 03       294    294 	LD	A,(IX+3)
+022d  fd 8e 03       295    295 	ADC	A,(IY+3)
+0230  dd 77 03       296    296 	LD	(IX+3),A
+0233  30 66          297    297 	JR	NC,AD_RND	; kein Ueberlauf --> zum Runden
+0235  dd cb 03 1e    298    298 	RR	(IX+3)		; Ueberlauf einschieben
+0239  dd cb 02 1e    299    299 	RR	(IX+2)		; und Exponent erhoehen
+023d  dd cb 01 1e    300    300 	RR	(IX+1)		; durch die Vorgeschichte ist
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 6
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0241  dd cb 00 1e    301    301 	RR	(IX+0)		; gesichert, dass B Null ist; BC
+0245  03             302    302 	INC	BC		; enthaelt den 16-Bit-Exponent
+0246  18 53          303    303 	JR	AD_RND		; und zum Runden
+                     304    304 SUBTR:
+0248  dd 7e 00       305    305 	LD	A,(IX+0)	; Die beiden Mantissen werden
+024b  fd 96 00       306    306 	SUB	(IY+0)		; voneinander subtrahiert
+024e  dd 77 00       307    307 	LD	(IX+0),A
+0251  dd 7e 01       308    308 	LD	A,(IX+1)
+0254  fd 9e 01       309    309 	SBC	A,(IY+1)
+0257  dd 77 01       310    310 	LD	(IX+1),A
+025a  dd 7e 02       311    311 	LD	A,(IX+2)
+025d  fd 9e 02       312    312 	SBC	A,(IY+2)
+0260  dd 77 02       313    313 	LD	(IX+2),A
+0263  dd 7e 03       314    314 	LD	A,(IX+3)
+0266  fd 9e 03       315    315 	SBC	A,(IY+3)
+0269  dd 77 03       316    316 	LD	(IX+3),A
+026c  fa 9b 02       317    317 	JP	M,AD_RND	; bei fuehrender Eins zum Runden
+026f  20 0f          318    318 	JR	NZ,AD_NRM	; ungleich Null: Normalisieren
+0271  dd be 02       319    319 	CP	(IX+2)		; Rest der Mantisse auch Null?
+0274  20 0a          320    320 	JR	NZ,AD_NRM
+0276  dd be 01       321    321 	CP	(IX+1)
+0279  20 05          322    322 	JR	NZ,AD_NRM
+027b  dd be 00       323    323 	CP	(IX+0)
+027e  28 4f          324    324 	JR	Z,AD_ZERO	; alles Null --> Ergebnis ist Null
+                     325    325 AD_NRM:
+0280  af             326    326 	XOR	A		; A = 0
+                     327    327 AD_NR1:
+0281  b9             328    328 	CP	C		; Exponent ist Null?
+0282  20 03          329    329 	JR	NZ,AD_NR2	; nein, Normierung moeglich
+0284  b8             330    330 	CP	B		; oberes Byte auch Null?
+0285  28 14          331    331 	JR	Z,AD_RND	; dann ist Ergebnis denormalisiert
+                     332    332 AD_NR2:
+0287  0b             333    333 	DEC	BC		; Exponent erniedrigen
+0288  dd cb 00 26    334    334 	SLA	(IX+0)		; Mantisse normalisieren bis
+028c  dd cb 01 16    335    335 	RL	(IX+1)		; fuehrende Eins auftaucht
+0290  dd cb 02 16    336    336 	RL	(IX+2)
+0294  dd cb 03 16    337    337 	RL	(IX+3)
+0298  f2 81 02       338    338 	JP	P,AD_NR1	; weiter bis fuehrende Eins auftaucht
+                     339    339 AD_RND:
+029b  dd 7e 00       340    340 	LD	A,(IX+0)	; jetzt Runden auf Bit hinter
+029e  c6 80          341    341 	ADD	A,80H		; Mantisse
+02a0  30 1d          342    342 	JR	NC,AD_NOV	; kein Uebertrag?
+02a2  dd 34 01       343    343 	INC	(IX+1)		; doch, naechstes Mantissenbyte
+02a5  20 18          344    344 	JR	NZ,AD_NOV	; behandeln, jetzt auf Null pruefen,
+02a7  dd 34 02       345    345 	INC	(IX+2)		; da der INC-Befehl kein Carry liefert
+02aa  20 13          346    346 	JR	NZ,AD_NOV
+02ac  dd 34 03       347    347 	INC	(IX+3)
+02af  20 0e          348    348 	JR	NZ,AD_NOV
+02b1  37             349    349 	SCF			; Eins erzeugen
+02b2  dd cb 03 1e    350    350 	RR	(IX+3)		; bei Ueberlauf Mantisse durch
+02b6  dd cb 02 1e    351    351 	RR	(IX+2)		; Rechtsschieben wieder normalisieren
+02ba  dd cb 01 1e    352    352 	RR	(IX+1)		; (nur noch 24 Bit noetig)
+02be  03             353    353 	INC	BC		; und Exponent korrigieren
+                     354    354 AD_NOV:
+02bf  af             355    355 	XOR	A		; A = 0
+02c0  dd be 03       356    356 	CP	(IX+3)		; Mantisse auf Null pruefen
+02c3  20 10          357    357 	JR	NZ,AD_NOZ
+02c5  dd be 02       358    358 	CP	(IX+2)
+02c8  20 0b          359    359 	JR	NZ,AD_NOZ
+02ca  dd be 01       360    360 	CP	(IX+1)		; alle Mantissenbytes Null?
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 7
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+02cd  20 06          361    361 	JR	NZ,AD_NOZ	; dann ist auch das Ergebnis Null
+                     362    362 AD_ZERO:			; Null Ergebnis aufbauen
+02cf  47             363    363 	LD	B,A
+02d0  4f             364    364 	LD	C,A
+02d1  57             365    365 	LD	D,A
+02d2  5f             366    366 	LD	E,A
+02d3  18 39          367    367 	JR	AD_EXIT		; dann Routine verlassen
+                     368    368 AD_NOZ:
+02d5  b8             369    369 	CP	B		; A ist 0
+02d6  3e ff          370    370 	LD	A,MAXEXPO	; Exponent oberstes Byte ungleich Null?
+02d8  20 03          371    371 	JR	NZ,AD_OVR	; dann ist Ueberlauf eingetreten
+02da  b9             372    372 	CP	C		; oder genau maxexpo erreicht?
+02db  20 0d          373    373 	JR	NZ,AD_NUE	; nein, --> kein Ueberlauf
+                     374    374 AD_OVR:
+02dd  4f             375    375 	LD	C,A		; Exponent auf maxexpo setzen
+02de  af             376    376 	XOR	A		; und Mantisse auf Null
+02df  dd 77 03       377    377 	LD	(IX+3),A	; fuer unendlich
+02e2  dd 77 02       378    378 	LD	(IX+2),A
+02e5  dd 77 01       379    379 	LD	(IX+1),A
+02e8  18 10          380    380 	JR	AD_DEN
+                     381    381 AD_NUE:
+02ea  af             382    382 	XOR	A		; A = 0
+02eb  b9             383    383 	CP	C		; Exponent Null (Zahl denormalisiert)?
+02ec  28 0c          384    384 	JR	Z,AD_DEN	; ja, -->
+02ee  dd cb 01 26    385    385 	SLA	(IX+1)		; fuehrendes Bit wird nicht gespeichert
+02f2  dd cb 02 16    386    386 	RL	(IX+2)		; daher Mantisse um 1 Bit nach links
+02f6  dd cb 03 16    387    387 	RL	(IX+3)
+                     388    388 AD_DEN:
+02fa  41             389    389 	LD	B,C		; Ergebnis aufbauen: Exponent in B
+02fb  dd 4e 03       390    390 	LD	C,(IX+3)	; Mantisse oberstes Byte
+02fe  dd 56 02       391    391 	LD	D,(IX+2)
+0301  cb 23          392    392 	SLA	E		; Vorzeichen aus E in Carry schieben
+0303  dd 5e 01       393    393 	LD	E,(IX+1)
+0306  cb 18          394    394 	RR	B		; Vorzeichen in Ergebnis einschieben
+0308  cb 19          395    395 	RR	C
+030a  cb 1a          396    396 	RR	D
+030c  cb 1b          397    397 	RR	E
+                     398    398 AD_EXIT:
+030e  fd e1          399    399 	POP	IY		; Register restaurieren
+0310  dd e1          400    400 	POP	IX
+0312  f1             401    401 	POP	AF
+0313  e1             402    402 	POP	HL
+0314  22 83 06       403    403 	LD	(F_HL),HL	; HL zwischenspeichern
+0317  e3             404    404 	EX	(SP),HL		; alte Ruecksprungadresse in HL
+0318  ed 7b 81 06    405    405 	LD	SP,(F_STACK)	; Stack zuruecksetzen
+031c  e5             406    406 	PUSH	HL		; Ruecksprungadresse ablegen
+031d  2a 83 06       407    407 	LD	HL,(F_HL)	; HL wieder laden
+0320  c9             408    408 	RET			; Ende des Unterprogramms
+                     409    409 
+                     410    410 ; *************************************************
+                     411    411 ; * Fliesskomma-Subtraktion in Single-Precision
+                     412    412 ; * Parameter: Operand 1 und Operand 2 ueber Stack
+                     413    413 ; * Ergebnis: in BC-DE: MSB in B, LSB in E
+                     414    414 ; *
+                     415    415 
+                     416    416 F_SUB:
+0321  e5             417    417 	PUSH	HL		; alten Basepointer retten
+0322  ed 73 81 06    418    418 	LD	(F_STACK),SP	; aktuellen Stackpointer abspeichern
+0326  2a 81 06       419    419 	LD	HL,(F_STACK)	; und in HL laden (= Basepointer)
+0329  f5             420    420 	PUSH	AF		; benoetigte Register retten
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 8
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+032a  dd e5          421    421 	PUSH	IX
+032c  fd e5          422    422 	PUSH	IY
+032e  01 04 00       423    423 	LD	BC,OP1
+0331  09             424    424 	ADD	HL,BC
+0332  e5             425    425 	PUSH	HL
+0333  dd e1          426    426 	POP	IX		; IX zeigt auf Operand 1
+0335  01 04 00       427    427 	LD	BC,OPSIZE
+0338  09             428    428 	ADD	HL,BC
+0339  e5             429    429 	PUSH	HL
+033a  fd e1          430    430 	POP	IY		; IY zeigt auf Operand 2
+033c  3e 80          431    431 	LD	A,80H
+033e  fd ae 03       432    432 	XOR	(IY+3)		; Vorzeichenbit von Operand 2 umdrehen
+0341  fd 77 03       433    433 	LD	(IY+3),A	; wieder abspeichern
+0344  c3 84 01       434    434 	JP	F_ADSUB		; jetzt weiter bei Additionsroutine
+                     435    435 
+                     436    436 ; *************************************************
+                     437    437 ; * Fliesskomma-Multiplikation in Single-Precision
+                     438    438 ; * Parameter: Operand 1 und Operand 2 ueber Stack
+                     439    439 ; * Ergebnis: in BC-DE: MSB in B, LSB in E
+                     440    440 ; *
+                     441    441 
+fff6                 442    442 TEMP	EQU	-10		; Offset lokale Variable (6 Byte)
+                     443    443 
+                     444    444 F_MUL:
+0347  e5             445    445 	PUSH	HL		; alten Basepointer retten
+0348  ed 73 81 06    446    446 	LD	(F_STACK),SP	; aktuellen Stackpointer abspeichern
+034c  2a 81 06       447    447 	LD	HL,(F_STACK)	; und in HL laden (= Basepointer)
+034f  f5             448    448 	PUSH	AF		; benoetigte Register retten
+0350  dd e5          449    449 	PUSH	IX
+0352  fd e5          450    450 	PUSH	IY
+0354  01 04 00       451    451 	LD	BC,OP1
+0357  09             452    452 	ADD	HL,BC
+0358  e5             453    453 	PUSH	HL
+0359  dd e3          454    454 	EX	(SP),IX		; IX zeigt auf Operand 1
+                     455    455 				; 2 Dummy-Byte auf Stack fuer lokale
+035b  01 04 00       456    456 	LD	BC,OPSIZE	; Variable bleiben stehen
+035e  09             457    457 	ADD	HL,BC
+035f  e5             458    458 	PUSH	HL
+0360  fd e3          459    459 	EX	(SP),IY		; IY zeigt auf Operand 2
+0362  e5             460    460 	PUSH	HL		; insgesamt 6 Byte fuer lokale Variable
+0363  09             461    461 	ADD	HL,BC		; HL zeigt jetzt hinter die Operanden!
+0364  22 81 06       462    462 	LD	(F_STACK),HL
+0367  dd 7e 03       463    463 	LD	A,(IX+3)	; Ergebnisvorzeichen bestimmen
+036a  fd ae 03       464    464 	XOR	(IY+3)
+036d  4f             465    465 	LD	C,A		; Vorzeichen in C Bit 7 merken
+036e  16 00          466    466 	LD	D,0		; Exponent 1 laden
+0370  dd 5e 03       467    467 	LD	E,(IX+3)
+0373  dd 7e 02       468    468 	LD	A,(IX+2)	; Operand um 8 Bit nach links schieben
+0376  dd 77 03       469    469 	LD	(IX+3),A
+0379  dd cb 03 be    470    470 	RES	7,(IX+3)	; implizite Null vorbesetzen
+037d  cb 27          471    471 	SLA	A		; Exponent unterstes Bit in Carry
+037f  cb 13          472    472 	RL	E		; und in E einschieben
+0381  28 05          473    473 	JR	Z,MU_DN1	; falls Null, dann OP1 denormalisieren
+0383  dd cb 03 fe    474    474 	SET	7,(IX+3)	; implizite Eins erzeugen
+0387  1b             475    475 	DEC	DE		; Bias kompensieren
+                     476    476 MU_DN1:
+0388  dd 7e 01       477    477 	LD	A,(IX+1)	; jetzt restliche Bytes verschieben
+038b  dd 77 02       478    478 	LD	(IX+2),A
+038e  dd 7e 00       479    479 	LD	A,(IX+0)
+0391  dd 77 01       480    480 	LD	(IX+1),A
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 9
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0394  af             481    481 	XOR	A		; unterste Mantissenbits loeschen
+0395  dd 77 00       482    482 	LD	(IX+0),A	; Form: FFFF ... FFFF 0000 0000
+0398  dd 77 fb       483    483 	LD	(IX+TEMP+5),A	; lokale Variable mit Null vorbesetzen
+039b  dd 77 fa       484    484 	LD	(IX+TEMP+4),A
+039e  dd 77 f9       485    485 	LD	(IX+TEMP+3),A
+03a1  dd 77 f8       486    486 	LD	(IX+TEMP+2),A
+03a4  dd 77 f7       487    487 	LD	(IX+TEMP+1),A
+03a7  dd 77 f6       488    488 	LD	(IX+TEMP+0),A
+03aa  67             489    489 	LD	H,A		; Exponent 2 in HL aufbauen
+03ab  fd 6e 03       490    490 	LD	L,(IY+3)
+03ae  fd 7e 02       491    491 	LD	A,(IY+2)
+03b1  fd cb 02 be    492    492 	RES	7,(IY+2)	; implizite Null vorbesetzen
+03b5  cb 27          493    493 	SLA	A
+03b7  cb 15          494    494 	RL	L
+03b9  28 05          495    495 	JR	Z,MU_DN2	; gleich Null, dann Op2 denormalisieren
+03bb  fd cb 02 fe    496    496 	SET	7,(IY+2)	; implizite Eins erzeugen
+03bf  2b             497    497 	DEC	HL		; Bias kompensieren
+                     498    498 MU_DN2:
+03c0  19             499    499 	ADD	HL,DE		; Exponenten aufaddieren
+03c1  11 84 ff       500    500 	LD	DE,3-BIAS	; Bias-3 subtrahieren
+03c4  19             501    501 	ADD	HL,DE		; bzw. 3-Bias addieren
+03c5  f2 d0 03       502    502 	JP	P,MU_NOZ
+03c8  7d             503    503 	LD	A,L		; Exponent kleiner als -24?
+03c9  fe e8          504    504 	CP	-24
+03cb  30 03          505    505 	JR	NC,MU_NOZ
+03cd  c3 e3 04       506    506 	JP	MU_ZERO		; ja, dann ist das Ergebnis Null
+                     507    507 MU_NOZ:
+03d0  06 18          508    508 	LD	B,24		; Multiplikationsschleifenzaehler
+03d2  11 00 00       509    509 	LD	DE,0		; Hilfsregister fuer Multiplikand
+                     510    510 MU_MUL:
+03d5  dd cb 03 3e    511    511 	SRL	(IX+3)		; Multiplikand nach rechts schieben
+03d9  dd cb 02 1e    512    512 	RR	(IX+2)
+03dd  dd cb 01 1e    513    513 	RR	(IX+1)
+03e1  dd cb 00 1e    514    514 	RR	(IX+0)
+03e5  cb 1a          515    515 	RR	D		; DE als Verlaengerung von Operand 1
+03e7  cb 1b          516    516 	RR	E
+03e9  fd cb 00 26    517    517 	SLA	(IY+0)		; Multiplikator nach links schieben
+03ed  fd cb 01 16    518    518 	RL	(IY+1)
+03f1  fd cb 02 16    519    519 	RL	(IY+2)		; falls fuehrendes Bit Null ist, dann
+03f5  30 32          520    520 	JR	NC,MU_NAD	; muss nicht addiert werden
+03f7  dd 7e f6       521    521 	LD	A,(IX+TEMP+0)	; sonst Multiplikand aufaddieren
+03fa  83             522    522 	ADD	A,E
+03fb  dd 77 f6       523    523 	LD	(IX+TEMP+0),A
+03fe  dd 7e f7       524    524 	LD	A,(IX+TEMP+1)
+0401  8a             525    525 	ADC	A,D
+0402  dd 77 f7       526    526 	LD	(IX+TEMP+1),A
+0405  dd 7e f8       527    527 	LD	A,(IX+TEMP+2)
+0408  dd 8e 00       528    528 	ADC	A,(IX+0)
+040b  dd 77 f8       529    529 	LD	(IX+TEMP+2),A
+040e  dd 7e f9       530    530 	LD	A,(IX+TEMP+3)
+0411  dd 8e 01       531    531 	ADC	A,(IX+1)
+0414  dd 77 f9       532    532 	LD	(IX+TEMP+3),A
+0417  dd 7e fa       533    533 	LD	A,(IX+TEMP+4)
+041a  dd 8e 02       534    534 	ADC	A,(IX+2)
+041d  dd 77 fa       535    535 	LD	(IX+TEMP+4),A
+0420  dd 7e fb       536    536 	LD	A,(IX+TEMP+5)
+0423  dd 8e 03       537    537 	ADC	A,(IX+3)
+0426  dd 77 fb       538    538 	LD	(IX+TEMP+5),A
+                     539    539 MU_NAD:
+0429  10 aa          540    540 	DJNZ	MU_MUL		; Schleife durchlaufen
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 10
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+042b  dd 7e fb       541    541 	LD	A,(IX+TEMP+5)
+042e  b7             542    542 	OR	A		; Flags setzen
+042f  fa 6e 04       543    543 	JP	M,MU_RND	; bei fuerender Eins zum Runden
+0432  20 12          544    544 	JR	NZ,MU_NOR	; ungleich Null --> normalisieren
+0434  dd be fa       545    545 	CP	(IX+TEMP+4)
+0437  20 0d          546    546 	JR	NZ,MU_NOR
+0439  dd be f9       547    547 	CP	(IX+TEMP+3)
+043c  20 08          548    548 	JR	NZ,MU_NOR
+043e  dd be f8       549    549 	CP	(IX+TEMP+2)
+0441  20 03          550    550 	JR	NZ,MU_NOR
+0443  c3 e3 04       551    551 	JP	MU_ZERO		; Mantisse komplett Null --> Null
+                     552    552 MU_NOR:
+0446  af             553    553 	XOR	A		; A = 0
+0447  b4             554    554 	OR	H		; Exponent ist negativ?
+0448  fa ea 04       555    555 	JP	M,MU_UNT	; ggf. Unterlauf behandeln
+                     556    556 MU_NR1:
+044b  af             557    557 	XOR	A		; A = 0
+044c  bd             558    558 	CP	L		; Exponent = Null?
+044d  20 03          559    559 	JR	NZ,MU_NR2
+044f  bc             560    560 	CP	H		; bei Null zum Runden
+0450  28 1c          561    561 	JR	Z,MU_RND
+                     562    562 MU_NR2:
+0452  2b             563    563 	DEC	HL		; Exponent erniedrigen
+0453  dd cb f6 26    564    564 	SLA	(IX+TEMP+0)
+0457  dd cb f7 16    565    565 	RL	(IX+TEMP+1)
+045b  dd cb f8 16    566    566 	RL	(IX+TEMP+2)	; Mantisse solange nach links
+045f  dd cb f9 16    567    567 	RL	(IX+TEMP+3)	; verschieben bis fuerende Eins
+0463  dd cb fa 16    568    568 	RL	(IX+TEMP+4)	; auftaucht
+0467  dd cb fb 16    569    569 	RL	(IX+TEMP+5)
+046b  f2 4b 04       570    570 	JP	P,MU_NR1
+                     571    571 MU_RND:
+046e  dd 7e f8       572    572 	LD	A,(IX+TEMP+2)	; jetzt Runden auf Bit hinter
+0471  c6 80          573    573 	ADD	A,80H		; Mantisse
+0473  30 1d          574    574 	JR	NC,MU_NOV	; kein Uebertrag?
+0475  dd 34 f9       575    575 	INC	(IX+TEMP+3)	; doch, naechstes Mantissenbyte
+0478  20 18          576    576 	JR	NZ,MU_NOV	; behandeln, jetzt auf Null pruefen
+047a  dd 34 fa       577    577 	INC	(IX+TEMP+4)	; da der INC-Befehl kein Carry liefert
+047d  20 13          578    578 	JR	NZ,MU_NOV
+047f  dd 34 fb       579    579 	INC	(IX+TEMP+5)
+0482  20 0e          580    580 	JR	NZ,MU_NOV
+0484  37             581    581 	SCF			; Eins erzeugen
+0485  dd cb fb 1e    582    582 	RR	(IX+TEMP+5)	; bei Ueberlauf Mantisse durch
+0489  dd cb fa 1e    583    583 	RR	(IX+TEMP+4)	; Rechtsschieben wieder normalisieren
+048d  dd cb f9 1e    584    584 	RR	(IX+TEMP+3)
+0491  23             585    585 	INC	HL		; und Eponent korrigieren
+                     586    586 MU_NOV:
+0492  af             587    587 	XOR	A		; A = 0
+0493  bc             588    588 	CP	H		; Exponent pruefen
+0494  3e ff          589    589 	LD	A,MAXEXPO	; A vorbesetzen
+0496  20 03          590    590 	JR	NZ,MU_OVR	; groesser Null: Ueberlauf behandeln
+0498  bd             591    591 	CP	L		; oder genau maxexpo erreicht?
+0499  20 0e          592    592 	JR	NZ,MU_NUE	; nein, kein Ueberlauf
+                     593    593 MU_OVR:
+049b  2e ff          594    594 	LD	L,MAXEXPO	; Ueberlauf: Exponent = maxexpo
+049d  af             595    595 	XOR	A		; 	     Mantisse = Null
+049e  dd 77 fb       596    596 	LD	(IX+TEMP+5),A
+04a1  dd 77 fa       597    597 	LD	(IX+TEMP+4),A
+04a4  dd 77 f9       598    598 	LD	(IX+TEMP+3),A
+04a7  18 10          599    599 	JR	MU_DEN
+                     600    600 MU_NUE:
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 11
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+04a9  af             601    601 	XOR	A		; A = 0
+04aa  bd             602    602 	CP	L		; Exponent ist Null?
+04ab  28 0c          603    603 	JR	Z,MU_DEN	; ja, Ergebnis ist denormalisiert
+04ad  dd cb f9 26    604    604 	SLA	(IX+TEMP+3)	; nein, fuehrendes Mantissenbit
+04b1  dd cb fa 16    605    605 	RL	(IX+TEMP+4)	; rausschieben
+04b5  dd cb fb 16    606    606 	RL	(IX+TEMP+5)
+                     607    607 MU_DEN:
+04b9  cb 21          608    608 	SLA	C		; Vorzeichen in Carry schieben
+04bb  45             609    609 	LD	B,L		; Exponent einsetzen
+04bc  dd 4e fb       610    610 	LD	C,(IX+TEMP+5)
+04bf  dd 56 fa       611    611 	LD	D,(IX+TEMP+4)
+04c2  dd 5e f9       612    612 	LD	E,(IX+TEMP+3)
+04c5  cb 18          613    613 	RR	B		; und Vorzeichen einschieben
+04c7  cb 19          614    614 	RR	C
+04c9  cb 1a          615    615 	RR	D		; Form: SEEE EEEE EFFF FFFF ... FFFF
+04cb  cb 1b          616    616 	RR	E
+                     617    617 MU_RES:
+04cd  e1             618    618 	POP	HL		; lokale Variable deallozieren
+04ce  e1             619    619 	POP	HL
+04cf  e1             620    620 	POP	HL
+04d0  fd e1          621    621 	POP	IY		; Register restaurieren
+04d2  dd e1          622    622 	POP	IX
+04d4  f1             623    623 	POP	AF
+04d5  e1             624    624 	POP	HL
+04d6  22 83 06       625    625 	LD	(F_HL),HL	; Parameter vom Stack deallozieren
+04d9  e3             626    626 	EX	(SP),HL
+04da  ed 7b 81 06    627    627 	LD	SP,(F_STACK)
+04de  e5             628    628 	PUSH	HL
+04df  2a 83 06       629    629 	LD	HL,(F_HL)
+04e2  c9             630    630 	RET			; und return
+                     631    631 MU_ZERO:
+04e3  af             632    632 	XOR	A		; Ergebnis ist Null
+04e4  47             633    633 	LD	B,A
+04e5  4f             634    634 	LD	C,A
+04e6  57             635    635 	LD	D,A
+04e7  5f             636    636 	LD	E,A
+04e8  18 e3          637    637 	JR	MU_RES
+                     638    638 MU_UNT:
+04ea  7d             639    639 	LD	A,L		; Exponent in A
+04eb  ed 44          640    640 	NEG			; negieren fuer Schleifenzaehler
+04ed  fe 18          641    641 	CP	24		; totaler Ueberlauf?
+04ef  30 f2          642    642 	JR	NC,MU_ZERO	; ja, dann ist Ergebnis Null
+04f1  47             643    643 	LD	B,A		; in B fuer Loop
+                     644    644 MU_SHR:
+04f2  dd cb fb 3e    645    645 	SRL	(IX+TEMP+5)	; Mantisse denormalisieren
+04f6  dd cb fa 1e    646    646 	RR	(IX+TEMP+4)	; bis Exponent Null ist
+04fa  dd cb f9 1e    647    647 	RR	(IX+TEMP+3)
+04fe  10 f2          648    648 	DJNZ	MU_SHR
+0500  68             649    649 	LD	L,B		; Exponent in Register L = B = 0
+0501  c3 b9 04       650    650 	JP	MU_DEN		; denormalisiertes Ergebnis erzeugen
+                     651    651 
+                     652    652 ; *************************************************
+                     653    653 ; * Fliesskomma-Division in Single-Precision
+                     654    654 ; * Parameter: Operand 1 und Operand 2 ueber Stack
+                     655    655 ; * Ergebnis: in BC-DE: MSB in B, LSB in E
+                     656    656 ; *
+                     657    657 
+                     658    658 F_DIV:
+0504  e5             659    659 	PUSH	HL		; alten Basepointer retten
+0505  ed 73 81 06    660    660 	LD	(F_STACK),SP	; aktuellen Stackpointer abspeichern
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 12
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0509  2a 81 06       661    661 	LD	HL,(F_STACK)	; und in HL laden (= Basepointer)
+050c  f5             662    662 	PUSH	AF		; benoetigte Register retten
+050d  dd e5          663    663 	PUSH	IX
+050f  fd e5          664    664 	PUSH	IY
+0511  01 04 00       665    665 	LD	BC,OP1
+0514  09             666    666 	ADD	HL,BC
+0515  e5             667    667 	PUSH	HL
+0516  dd e3          668    668 	EX	(SP),IX		; IX zeigt auf Operand 1
+                     669    669 				; 2 Dummy-Byte auf Stack fuer lokale
+0518  01 04 00       670    670 	LD	BC,OPSIZE	; Variable bleiben stehen
+051b  09             671    671 	ADD	HL,BC
+051c  e5             672    672 	PUSH	HL
+051d  fd e3          673    673 	EX	(SP),IY		; IY zeigt auf Operand 2
+051f  e5             674    674 	PUSH	HL		; insgesamt 6 Byte fuer lokale Variable
+0520  09             675    675 	ADD	HL,BC		; HL zeigt jetzt hinter die Operanden!
+0521  22 81 06       676    676 	LD	(F_STACK),HL
+0524  dd 7e 03       677    677 	LD	A,(IX+3)	; Ergebnisvorzeichen bestimmen
+0527  fd ae 03       678    678 	XOR	(IY+3)
+052a  4f             679    679 	LD	C,A		; Vorzeichen in C Bit 7 merken
+052b  26 00          680    680 	LD	H,0		; Exponent 1 laden
+052d  dd 6e 03       681    681 	LD	L,(IX+3)
+0530  dd 7e 02       682    682 	LD	A,(IX+2)
+0533  dd cb 02 be    683    683 	RES	7,(IX+2)	; implizite Null vorbesetzen
+0537  cb 27          684    684 	SLA	A		; Exponent unterstes Bit in Carry
+0539  cb 15          685    685 	RL	L		; und in E einschieben
+053b  28 05          686    686 	JR	Z,DV_DN1	; falls Null, dann Op1 denormalisieren
+053d  dd cb 02 fe    687    687 	SET	7,(IX+2)	; implizite Eins erzeugen
+0541  2b             688    688 	DEC	HL		; Bias kompensieren
+                     689    689 DV_DN1:
+0542  16 00          690    690 	LD	D,0		; Exponent 2 in DE aufbauen
+0544  fd 5e 03       691    691 	LD	E,(IY+3)
+0547  fd 7e 02       692    692 	LD	A,(IY+2)
+054a  fd 77 03       693    693 	LD	(IY+3),A	; Mantisse um 8 Bit verschieben
+054d  fd cb 03 be    694    694 	RES	7,(IY+3)	; implizite Null vorbesetzen
+0551  cb 27          695    695 	SLA	A
+0553  cb 13          696    696 	RL	E
+0555  28 05          697    697 	JR	Z,DV_DN2	; gleich Null, dann Op2 denormalisieren
+0557  fd cb 03 fe    698    698 	SET	7,(IY+3)	; implizite Eins erzeugen
+055b  1b             699    699 	DEC	DE		; Bias kompensieren
+                     700    700 DV_DN2:
+055c  fd 7e 01       701    701 	LD	A,(IY+1)	; jetzt restliche Bytes verschieben
+055f  fd 77 02       702    702 	LD	(IY+2),A
+0562  fd 7e 00       703    703 	LD	A,(IY+0)
+0565  fd 77 01       704    704 	LD	(IY+1),A
+0568  af             705    705 	XOR	A		; A = 0
+0569  fd 77 00       706    706 	LD	(IY+0),A	; Form: FFFF ... FFFF 0000 0000
+056c  fd cb 03 3e    707    707 	SRL	(IY+3)
+0570  fd cb 02 1e    708    708 	RR	(IY+2)
+0574  fd cb 01 1e    709    709 	RR	(IY+1)
+0578  fd cb 00 1e    710    710 	RR	(IY+0)		; Form: 0FFF ... FFFF F000 0000
+057c  20 12          711    711 	JR	NZ,DV_NZ1	; Mantisse 2 auf Null pruefen
+057e  fd be 01       712    712 	CP	(IY+1)
+0581  20 0d          713    713 	JR	NZ,DV_NZ1
+0583  fd be 02       714    714 	CP	(IY+2)
+0586  20 08          715    715 	JR	NZ,DV_NZ1
+0588  fd be 03       716    716 	CP	(IY+3)
+058b  20 03          717    717 	JR	NZ,DV_NZ1
+058d  c3 9b 04       718    718 	JP	MU_OVR		; Bei Division durch Null: unendlich
+                     719    719 DV_NZ1:
+0590  af             720    720 	XOR	A		; Carry-Flag loeschen
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 13
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0591  ed 52          721    721 	SBC	HL,DE		; Exponenten subtrahieren
+0593  11 7f 00       722    722 	LD	DE,BIAS		; Bias addieren
+0596  19             723    723 	ADD	HL,DE
+0597  cb 7c          724    724 	BIT	7,H		; Exponent positiv?
+0599  28 06          725    725 	JR	Z,DV_NOZ
+059b  7d             726    726 	LD	A,L		; Exponent kleiner als -24?
+059c  30 03          727    727 	JR	NC,DV_NOZ
+059e  c3 e3 04       728    728 	JP	MU_ZERO		; ja, dann ist das Ergebnis Null
+                     729    729 DV_NOZ:
+05a1  c5             730    730 	PUSH	BC		; Vorzeichen retten
+05a2  11 19 00       731    731 	LD	DE,25		; Exponent um 25 erhoehen
+05a5  19             732    732 	ADD	HL,DE		; jetzt ist er sicher groesser als Null
+05a6  af             733    733 	XOR	A		; A = 0
+05a7  dd 46 02       734    734 	LD	B,(IX+2)	; Divident in Register kopieren
+05aa  dd 4e 01       735    735 	LD	C,(IX+1)
+05ad  dd 56 00       736    736 	LD	D,(IX+0)
+05b0  5f             737    737 	LD	E,A		; die untersten Bits sind Null
+05b1  ba             738    738 	CP	D		; ist Dividend Null?
+05b2  20 0a          739    739 	JR	NZ,DV_NZ2
+05b4  b9             740    740 	CP	C
+05b5  20 07          741    741 	JR	NZ,DV_NZ2
+05b7  b8             742    742 	CP	B
+05b8  20 04          743    743 	JR	NZ,DV_NZ2
+05ba  c1             744    744 	POP	BC		; Stack bereinigen (Vorzeichen laden)
+05bb  c3 e3 04       745    745 	JP	MU_ZERO		; und Null als Ergebnis ausgeben
+                     746    746 DV_NZ2:
+05be  dd 77 fb       747    747 	LD	(IX+TEMP+5),A	; Ergebnis vorbesetzen
+05c1  dd 77 fa       748    748 	LD	(IX+TEMP+4),A
+05c4  dd 77 f9       749    749 	LD	(IX+TEMP+3),A
+05c7  dd 77 f8       750    750 	LD	(IX+TEMP+2),A
+                     751    751 DV_NLP:
+05ca  fd cb 03 76    752    752 	BIT	6,(IY+3)	; ist der Divisor normalisiert
+05ce  20 13          753    753 	JR	NZ,DV_NOR	; ja, -->
+05d0  23             754    754 	INC	HL		; nein, Exponent erhoehen
+05d1  fd cb 00 26    755    755 	SLA	(IY+0)		; Divisor verschieben bis in
+05d5  fd cb 01 16    756    756 	RL	(IY+1)		; Form 01FF ...
+05d9  fd cb 02 16    757    757 	RL	(IY+2)
+05dd  fd cb 03 16    758    758 	RL	(IY+3)
+05e1  18 e7          759    759 	JR	DV_NLP
+                     760    760 DV_NOR:
+05e3  cb 38          761    761 	SRL	B
+05e5  cb 19          762    762 	RR	C
+05e7  cb 1a          763    763 	RR	D
+05e9  cb 1b          764    764 	RR	E		; Form: 0FFF ... FFFF F000 0000
+                     765    765 DV_LOP:
+05eb  dd 70 03       766    766 	LD	(IX+3),B	; Dividend zwischenspeichern
+05ee  dd 71 02       767    767 	LD	(IX+2),C	; die Speicherplaetze von Op1
+05f1  dd 72 01       768    768 	LD	(IX+1),D	; stehen zur Verfuegung, da wir OP1
+05f4  dd 73 00       769    769 	LD	(IX+0),E	; in die Register BC-DE kopiert haben
+05f7  7b             770    770 	LD	A,E		; jetzt Divisor abziehen
+05f8  fd 96 00       771    771 	SUB	(IY+0)
+05fb  5f             772    772 	LD	E,A
+05fc  7a             773    773 	LD	A,D
+05fd  fd 9e 01       774    774 	SBC	A,(IY+1)
+0600  57             775    775 	LD	D,A
+0601  79             776    776 	LD	A,C
+0602  fd 9e 02       777    777 	SBC	A,(IY+2)
+0605  4f             778    778 	LD	C,A
+0606  78             779    779 	LD	A,B
+0607  fd 9e 03       780    780 	SBC	A,(IY+3)
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 14
+Source file: float.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+060a  47             781    781 	LD	B,A
+060b  30 0c          782    782 	JR	NC,DV_ONE	; kein Carry: Divisor passt
+060d  dd 5e 00       783    783 	LD	E,(IX+0)	; zurueckkopieren
+0610  dd 56 01       784    784 	LD	D,(IX+1)	; Carry bleibt dabei erhalten
+0613  dd 4e 02       785    785 	LD	C,(IX+2)
+0616  dd 46 03       786    786 	LD	B,(IX+3)
+                     787    787 DV_ONE:
+0619  3f             788    788 	CCF			; Carry-Flag umkehren
+061a  dd cb f8 16    789    789 	RL	(IX+TEMP+2)	; Ergebnis aufbauen
+061e  dd cb f9 16    790    790 	RL	(IX+TEMP+3)
+0622  dd cb fa 16    791    791 	RL	(IX+TEMP+4)
+0626  dd cb fb 16    792    792 	RL	(IX+TEMP+5)
+062a  cb 23          793    793 	SLA	E		; Dividend verschieben
+062c  cb 12          794    794 	RL	D
+062e  cb 11          795    795 	RL	C
+0630  cb 10          796    796 	RL	B
+0632  2b             797    797 	DEC	HL		; Exponent erniedrigen
+0633  af             798    798 	XOR	A		; A = 0
+0634  bd             799    799 	CP	L		; Exponent = Null ?
+0635  20 03          800    800 	JR	NZ,DV_DIV
+0637  bc             801    801 	CP	H
+0638  28 06          802    802 	JR	Z,DV_DEN	; falls Null, dann denormalisiert
+                     803    803 DV_DIV:
+063a  dd cb fb 46    804    804 	BIT	0,(IX+TEMP+5)	; fuerende Eins in Ergebnis-Mantisse?
+063e  28 ab          805    805 	JR	Z,DV_LOP	; nein, weiter rechnen
+                     806    806 DV_DEN:
+0640  dd 46 fb       807    807 	LD	B,(IX+TEMP+5)	; hoechstes Bit merken
+0643  dd 7e fa       808    808 	LD	A,(IX+TEMP+4)
+0646  dd 77 fb       809    809 	LD	(IX+TEMP+5),A	; Mantisse in Form
+0649  dd 7e f9       810    810 	LD	A,(IX+TEMP+3)	; FFFF ... FFFF 0000 0000
+064c  dd 77 fa       811    811 	LD	(IX+TEMP+4),A
+064f  dd 7e f8       812    812 	LD	A,(IX+TEMP+2)
+0652  dd 77 f9       813    813 	LD	(IX+TEMP+3),A
+0655  cb 18          814    814 	RR	B		; hoechstes Bit einschieben
+0657  dd cb fb 1e    815    815 	RR	(IX+TEMP+5)
+065b  dd cb fa 1e    816    816 	RR	(IX+TEMP+4)
+065f  dd cb f9 1e    817    817 	RR	(IX+TEMP+3)	; Form: FFFF ... FFFF F000 0000
+0663  dd cb f8 1e    818    818 	RR	(IX+TEMP+2)
+0667  c1             819    819 	POP	BC		; Vorzeichen wieder laden
+0668  af             820    820 	XOR	A		; A = 0
+0669  dd be fb       821    821 	CP	(IX+TEMP+5)	; Mantisse ist Null?
+066c  20 10          822    822 	JR	NZ,DV_NZ3
+066e  dd be fa       823    823 	CP	(IX+TEMP+4)
+0671  20 0b          824    824 	JR	NZ,DV_NZ3
+0673  dd be f9       825    825 	CP	(IX+TEMP+3)
+0676  20 06          826    826 	JR	NZ,DV_NZ3
+0678  dd be f8       827    827 	CP	(IX+TEMP+2)
+067b  ca e3 04       828    828 	JP	Z,MU_ZERO	; dann ist Ergebnis auch Null
+                     829    829 DV_NZ3:
+067e  c3 6e 04       830    830 	JP	MU_RND		; sonst weiter wie bei Multiplikation
+                     831    831 
+                     832    832 F_STACK:	
+0681                 833    833 	DEFS	2		; Hilfsspeicher fuer Stackpointer
+                     834    834 F_HL:
+0683                 835    835 	DEFS	2		; Hilfsspeicher fuer Basepointer HL
+                     836    836 
+0685                 837    837 	END
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 15
+Source file: float.asm
+Title:       Symboltable
+
+AD_ANP   01f9 	AD_DEN   02fa 	AD_DN1   01cb 	AD_DN2   01db 	
+AD_EXIT  030e 	AD_NAP   020b 	AD_NOV   02bf 	AD_NOZ   02d5 	
+AD_NR1   0281 	AD_NR2   0287 	AD_NRM   0280 	AD_NUE   02ea 	
+AD_OVR   02dd 	AD_RND   029b 	AD_ZERO  02cf 	BIAS     007f 	
+DIG2     0149 	DV_DEN   0640 	DV_DIV   063a 	DV_DN1   0542 	
+DV_DN2   055c 	DV_LOP   05eb 	DV_NLP   05ca 	DV_NOR   05e3 	
+DV_NOZ   05a1 	DV_NZ1   0590 	DV_NZ2   05be 	DV_NZ3   067e 	
+DV_ONE   0619 	FADR     0002*	FAD_1    01bb 	FHL_ALT  0000*	
+F_ADD    0169 	F_ADSUB  0184 	F_DIV    0504 	F_HL     0683 	
+F_MUL    0347 	F_STACK  0681 	F_SUB    0321*	HEXOUT   012e 	
+MAXEXPO  00ff 	MU_DEN   04b9 	MU_DN1   0388 	MU_DN2   03c0 	
+MU_MUL   03d5 	MU_NAD   0429 	MU_NOR   0446 	MU_NOV   0492 	
+MU_NOZ   03d0 	MU_NR1   044b 	MU_NR2   0452 	MU_NUE   04a9 	
+MU_OVR   049b 	MU_RES   04cd 	MU_RND   046e 	MU_SHR   04f2 	
+MU_UNT   04ea 	MU_ZERO  04e3 	OP1      0004 	OP2      0008*	
+OPSIZE   0004 	OUTCHAR  0166 	STACK    012e 	START    0000*	
+SUBTR    0248 	TEMP     fff6 	

@@ -1,0 +1,1654 @@
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 1
+Source file: z80main.asm
+Title:       Test program for Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1      1 	TITLE	'Test program for Z80-Disassembler'
+                       2      2 
+                       3      3 ;==========================================================================
+                       4      4 ;	Test program for Z80-Disassembler
+                       5      5 ;==========================================================================
+                       6      6 
+0000  31 4f 0d         7      7 	LD	SP,STACK	; initialize stack for simulator
+0003  21 c9 06         8      8 	LD	HL,Z80OPS	; start address for disassembler
+0006  22 c7 06         9      9 	LD	(DADR),HL
+                      10     10 LOOP:
+0009  cd 19 00        11     11 	CALL	DISSCR		; disassemble one screen full
+000c  76              12     12 	HALT			; stop simulation
+000d  c3 09 00        13     13 	JP	LOOP		; next run
+                      14     14 
+                      15     15 PRTSTR:				; print 0 terminated string
+0010  7e              16     16 	LD	A,(HL)		; next char -> A
+0011  b7              17     17 	OR	A		; 0 ?
+0012  c8              18     18 	RET	Z		; yes, done
+0013  d3 01           19     19 	OUT	(1),A		; no, print it
+0015  23              20     20 	INC	HL		; increase pointer to string
+0016  c3 10 00        21     21 	JP	PRTSTR		; process next char
+                      22     22 
+                      23     23 	INCLUDE z80dis.asm
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 2
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1     24 	TITLE	'Z80-Disassembler'
+                       2     25 
+                       3     26 ;	Hardware-unabhaengiger, ROM-faehiger Z80-Disassembler
+                       4     27 ;
+                       5     28 ;	Die Adresse, ab der disassembliert serden soll, ist in der
+                       6     29 ;	16-Bit Speicherzelle DADR abzulegen. Danach kann eines der
+                       7     30 ;	Entrys DISSCR (Ausgabe eines Bildschirms) oder DISLIN
+                       8     31 ;	(Ausgabe einer Zeile) aufgerufen werden. Da die Folgeadressen
+                       9     32 ;	durch das Programm ebenfalls wieder in der Speicherzelle
+                      10     33 ;	DADR abgelegt werden, ist mehrfacher Aufruf ohne Laden
+                      11     34 ;	von neuen Adressen moeglich.
+                      12     35 ;	Zur Ausgabe muss ein Unterprogramm mit dem Namen PRTSTR
+                      13     36 ;	erstellt werden, dem in HL die Adresse eines Null-terminierten
+                      14     37 ;	Strings uebergeben wird.
+                      15     38 ;
+                      16     39 ;	27-JUN-89	Udo Munk
+                      17     40 
+000f                  18     41 LPP	EQU	15		; Anzahl Zeilen/Bildschirm Ausgabe
+0011                  19     42 MNEPOS	EQU	11H		; Offset des Mnemonics in Ausgabe-Workspace
+                      20     43 
+                      21     44 	; Disassembliere einen Bildschirm voll
+0019  06 0f           22     45 DISSCR:	LD	B,LPP		; einen Bildschirm mit LPP Zeilen
+001b  c5              23     46 $DLP1:	PUSH	BC		; disassemblieren
+001c  cd 23 00        24     47 	CALL	DISLIN
+001f  c1              25     48 	POP	BC
+0020  10 f9           26     49 	DJNZ	$DLP1
+0022  c9              27     50 	RET
+                      28     51 
+                      29     52 	; Disassembliere eine Zeile
+0023  cd 77 02        30     53 DISLIN:	CALL	CLWO		; Workspace fuer eine Zeile Ausgabe loeschen
+0026  21 a3 06        31     54 	LD	HL,WRKS		; Adresse der Ausgabe-Workspace -> HL
+0029  ed 5b c7 06     32     55 	LD	DE,(DADR)	; Disassemblier-Adresse -> DE
+002d  cd ad 02        33     56 	CALL	PRBY		; Adresse in DE ausgeben
+0030  23              34     57 	INC	HL		; Blank ausgeben
+0031  22 c5 06        35     58 	LD	(PRTMP),HL	; vordere Printposition retten
+0034  0e 00           36     59 	LD	C,0		; Steuerflag loeschen
+0036  1b              37     60 	DEC	DE		; laufende Adr.-1 -> DE
+0037  cd 9c 02        38     61 $DL13:	CALL	PRNB		; laufendes Byte ausgeben
+003a  1a              39     62 	LD	A,(DE)		; laufendes Byte -> A
+003b  47              40     63 	LD	B,A		; und in B retten
+003c  fe ed           41     64 	CP	0EDH		; Preafix ED ?
+003e  20 04           42     65 	JR	NZ,$DL14	
+0040  cb e1           43     66 	SET	4,C		; ja, ED-Flag setzen
+0042  18 f3           44     67 	JR	$DL13		; und naechstes Byte bearbeiten
+0044  fe fd           45     68 $DL14:	CP	0FDH		; Preafix FD ?
+0046  20 04           46     69 	JR	NZ,$DL15
+0048  cb f1           47     70 	SET	6,C		; ja, FD-Flag setzen
+004a  18 04           48     71 	JR	$DL16		; und Index-Flag setzen
+004c  fe dd           49     72 $DL15:	CP	0DDH		; Preafix DD ?
+004e  20 07           50     73 	JR	NZ,$DL17
+0050  cb e9           51     74 $DL16:	SET	5,C		; Index-Flag fuer IX/IY-Adressierung setzen
+0052  2a c5 06        52     75 	LD	HL,(PRTMP)	; vordere Printposition -> HL
+0055  18 e0           53     76 	JR	$DL13		; naechstes Byte bearbeiten
+0057  21 b4 06        54     77 $DL17:	LD	HL,WRKS+MNEPOS	; HL auf Operator Position setzen
+                      55     78 
+                      56     79 	; nach Praefix CB
+005a  78              57     80 CB:	LD	A,B		; Befehlsbyte aus B holen
+005b  fe cb           58     81 	CP	0CBH		; Preafix CB ?
+005d  c2 ac 00        59     82 	JP	NZ,OHNE
+0060  13              60     83 	INC	DE		; ja, Pointer auf naechstes Byte setzen
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 3
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0061  cb 69           61     84 	BIT	5,C		; IX/IY-Flag ?
+0063  28 01           62     85 	JR	Z,$DL18
+0065  13              63     86 	INC	DE		; ja, Pointer auf naechstes Byte setzen
+0066  1a              64     87 $DL18:	LD	A,(DE)		; naechstes Byte -> A
+0067  47              65     88 	LD	B,A		; und in B retten
+0068  d5              66     89 	PUSH	DE		; Disassemblieradr. retten
+0069  16 03           67     90 	LD	D,MNETAB > 8	; High-Byte Operatorentabelle -> D
+006b  1e e8           68     91 	LD	E,0E8H		; DE = Pointer auf "SET"
+006d  fe c0           69     92 	CP	0C0H		; SET ?
+006f  30 14           70     93 	JR	NC,$DL19
+0071  1e e4           71     94 	LD	E,0E4H		; nein, DE = Pointer auf "RES"
+0073  fe 80           72     95 	CP	80H		; RES ?
+0075  30 0e           73     96 	JR	NC,$DL19
+0077  1e e0           74     97 	LD	E,0E0H		; nein, DE = Pointer auf "BIT"
+0079  fe 40           75     98 	CP	40H		; BIT ?
+007b  30 08           76     99 	JR	NC,$DL19
+007d  e6 38           77    100 	AND	38H		; loesche Bits 0..2 und 6..7
+007f  0f              78    101 	RRCA			; Division durch 2
+0080  c6 80           79    102 	ADD	A,CBMTAB & 0FFH ; zur Basis der CB-Mnemonics addieren
+0082  5f              80    103 	LD	E,A
+0083  16 06           81    104 	LD	D,CBMTAB > 8	; DE = Pointer auf CB-Mnemonic
+0085  cd 87 02        82    105 $DL19:	CALL	TRBY		; Mnemonic ausgeben
+0088  d1              83    106 	POP	DE		; akt. Disassemblieradr. wieder -> DE
+0089  78              84    107 	LD	A,B		; Byte wieder -> A
+008a  cb 69           85    108 	BIT	5,C		; IX/IY-Flag ?
+008c  28 01           86    109 	JR	Z,$DL20
+008e  1b              87    110 	DEC	DE		; eins zurueck bei IX/IY-Adressierung
+008f  1b              88    111 $DL20:	DEC	DE		; Pointer wieder auf CB-Preafix
+0090  fe 40           89    112 	CP	40H		; CB-Befehl < 40H ?
+0092  38 0b           90    113 	JR	C,$DL21
+0094  e6 38           91    114 	AND	38H		; nein, Bits 0..2 und 6..7 loeschen
+0096  0f              92    115 	RRCA			; Division durch 8 -> 1. Operanden
+0097  0f              93    116 	RRCA
+0098  0f              94    117 	RRCA
+0099  cd 8b 01        95    118 	CALL	PRO1		; 1. Operanden ausgeben
+009c  78              96    119 	LD	A,B		; Byte wieder -> A
+009d  cb f9           97    120 	SET	7,C		; Komma-Flag setzen
+009f  e6 07           98    121 $DL21:	AND	7		; Bits 3..7 loeschen -> 2. Operanden
+00a1  cb e7           99    122 	SET	4,A		; Buchstaben-Flag setzen
+00a3  cd 8b 01       100    123 	CALL	PRO1		; 2. Operanden ausgeben
+00a6  cd 9c 02       101    124 	CALL	PRNB		; Befehlsbyte vorne ausgeben
+00a9  c3 5d 02       102    125 	JP	INAD		; fertig, Adresse merken und Workspace ausgeben
+                     103    126 
+                     104    127 	; ohne Preafix CB/ED
+00ac  d5             105    128 OHNE:	PUSH	DE		; Disassemblieradr. retten
+00ad  cb 61          106    129 	BIT	4,C		; ED-Flag ?
+00af  c2 42 01       107    130 	JP	NZ,ED
+00b2  fe 40          108    131 	CP	40H		; nein, < 40H ?
+00b4  38 1a          109    132 	JR	C,$DL25
+00b6  fe 80          110    133 	CP	80H		; nein, > 80H ?
+00b8  30 0a          111    134 	JR	NC,$DL23
+00ba  1e 50          112    135 	LD	E,50H		; nein, DE = Pointer auf "LD"
+00bc  fe 76          113    136 	CP	76H		; HALT ?
+00be  20 02          114    137 	JR	NZ,$DL22
+00c0  1e 5c          115    138 	LD	E,5CH		; nein, DE = Pointer auf "HALT"
+00c2  18 11          116    139 $DL22:	JR	$DL26		; Mnemonic ausgeben
+00c4  fe c0          117    140 $DL23:	CP	0C0H		; > C0H ?
+00c6  30 06          118    141 	JR	NC,$DL24
+00c8  e6 38          119    142 	AND	38H		; ja, Bits 0..2 und 6..7 loeschen
+00ca  0f             120    143 	RRCA			; Division durch 2 -> Operator
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 4
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+00cb  5f             121    144 	LD	E,A		; Operator -> E
+00cc  18 07          122    145 	JR	$DL26		; Mnemonic ausgeben
+00ce  d6 80          123    146 $DL24:	SUB	80H		; wenn > C0H, -80 -> Tabellenoperator
+00d0  5f             124    147 $DL25:	LD	E,A		; Operator -> E
+00d1  16 04          125    148 	LD	D,CODTAB > 8	; High-Byte Operatortabelle -> D
+00d3  1a             126    149 	LD	A,(DE)		; LSB Mnemonic-Adresse -> A
+00d4  5f             127    150 	LD	E,A		; und nach E
+00d5  16 03          128    151 $DL26:	LD	D,MNETAB > 8	; MSB Mnemonic-Adresse -> D
+00d7  cd 87 02       129    152 	CALL	TRBY		; Mnemonic ausgeben
+00da  d1             130    153 	POP	DE		; akt. Disassemblieradr. wieder -> DE
+00db  78             131    154 	LD	A,B		; Befehlsbyte wieder -> A
+00dc  d5             132    155 	PUSH	DE		; Disassemblieradr. retten
+00dd  fe 40          133    156 	CP	40H		; Byte < 40 ?
+00df  38 30          134    157 	JR	C,$DL30
+00e1  fe 80          135    158 	CP	80H		; nein, > 80 ?
+00e3  30 11          136    159 	JR	NC,$DL28
+00e5  fe 76          137    160 	CP	76H		; nein, HALT ?
+00e7  20 04          138    161 	JR	NZ,$DL27
+00e9  3e ff          139    162 	LD	A,0FFH		; ja, leeren Operanden -> A
+00eb  18 28          140    163 	JR	$DL31		; Operanden ausgeben
+00ed  e6 38          141    164 $DL27:	AND	38H		; loesche Bits 0..2 und 6..7
+00ef  0f             142    165 	RRCA			; Division durch 8 -> 1. Operanden
+00f0  0f             143    166 	RRCA
+00f1  0f             144    167 	RRCA
+00f2  cb e7          145    168 	SET	4,A		; Buchstabenflag setzen
+00f4  18 1f          146    169 	JR	$DL31		; Operanden ausgeben
+00f6  fe c0          147    170 $DL28:	CP	0C0H		; > C0 ?
+00f8  30 15          148    171 	JR	NC,$DL29
+00fa  fe 90          149    172 	CP	90H		; > 90 ?
+00fc  38 0d          150    173 	JR	C,$DL51
+00fe  e6 f8          151    174 	AND	0F8H		; ja, Register-Bits loeschen
+0100  fe 98          152    175 	CP	98H		; "SBC" ?
+0102  28 07          153    176 	JR	Z,$DL51
+0104  78             154    177 	LD	A,B		; Byte wieder -> A
+0105  e6 07          155    178 	AND	7		; nur Register Bits uebrig lassen
+0107  cb e7          156    179 	SET	4,A		; Buchstaben-Flag setzen
+0109  18 79          157    180 	JR	$DL52
+010b  3e 17          158    181 $DL51:	LD	A,17H		; ja, 17 = Register A ausgeben
+010d  18 06          159    182 	JR	$DL31		; Operanden ausgeben
+010f  d6 80          160    183 $DL29:	SUB	80H		; wenn > C0, -80 -> Operandentabelle
+0111  5f             161    184 $DL30:	LD	E,A		; LSB Operandentabelle -> E
+0112  16 05          162    185 	LD	D,OPETAB > 8	; MSB Operandentabelle -> D
+0114  1a             163    186 	LD	A,(DE)		; 1. Operanden -> A
+0115  d1             164    187 $DL31:	POP	DE		; akt. Disassemblieradr. wieder -> DE
+0116  cd 8b 01       165    188 	CALL	PRO1		; 1. Operanden ausgeben
+0119  78             166    189 	LD	A,B		; Befehlsbyte wieder -> A
+011a  d5             167    190 	PUSH	DE		; akt. Disassemblieradr. retten
+011b  fe 40          168    191 	CP	40H		; < 40 ?
+011d  38 14          169    192 	JR	C,$DL34
+011f  fe c0          170    193 	CP	0C0H		; nein, < C0 ?
+0121  30 0e          171    194 	JR	NC,$DL33
+0123  fe 76          172    195 	CP	76H		; ja, HALT ?
+0125  20 04          173    196 	JR	NZ,$DL32
+0127  3e ff          174    197 	LD	A,0FFH		; ja, wieder leeren Operanden -> A
+0129  18 0e          175    198 	JR	$DL35		; Operanden ausgeben
+012b  e6 07          176    199 $DL32:	AND	7		; loesche Bits 3..7, -> 2. Operanden
+012d  cb e7          177    200 	SET	4,A		; Buchstabenflag setzen
+012f  18 08          178    201 	JR	$DL35		; Operanden ausgeben
+0131  d6 80          179    202 $DL33:	SUB	80H		; wenn > C0 : 80 abziehen
+0133  c6 80          180    203 $DL34:	ADD	A,80H		; LSB Operandentabelle -> A
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 5
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0135  5f             181    204 	LD	E,A		; und -> E
+0136  16 05          182    205 	LD	D,OPETAB > 8	; MSB Operandentabelle -> D
+0138  1a             183    206 	LD	A,(DE)		; 2. Operanden -> A
+0139  d1             184    207 $DL35:	POP	DE		; akt. Disassemblieradr. wieder -> DE
+013a  cb f9          185    208 	SET	7,C		; Komma-Flag setzen
+013c  cd 8b 01       186    209 	CALL	PRO1		; 2. Operanden ausgeben
+013f  c3 5d 02       187    210 	JP	INAD		; fertig, Adresse merken und Workspace ausgeben
+                     188    211 	
+                     189    212 	; nach Preafix ED
+0142  d6 40          190    213 ED:	SUB	40H		; 40 vom 2. Byte subtrahieren
+0144  da 56 02       191    214 	JP	C,ERRO		; Fehler wenn carry
+0147  fe 60          192    215 	CP	60H		; 2. Byte < A0 ?
+0149  30 07          193    216 	JR	NC,$DL36
+014b  fe 40          194    217 	CP	40H		; ja, >= 60 ?
+014d  d2 56 02       195    218 	JP	NC,ERRO		; ja, Fehler
+0150  18 02          196    219 	JR	$DL37		; nein, weiter
+0152  d6 20          197    220 $DL36:	SUB	20H		; aus 60..7F wird 00..20
+0154  c6 80          198    221 $DL37:	ADD	A,80H		; LSB Operatortabelle -> A
+0156  5f             199    222 	LD	E,A		; und -> E
+0157  16 04          200    223 	LD	D,CODTAB > 8	; MSB Operatortabelle -> D
+0159  1a             201    224 	LD	A,(DE)		; LSB Mnemonic-Adresse -> A
+015a  fe ff          202    225 	CP	0FFH		; leer ?
+015c  ca 56 02       203    226 	JP	Z,ERRO		; ja, Fehler
+015f  5f             204    227 	LD	E,A		; nein, -> E
+0160  16 03          205    228 	LD	D,MNETAB > 8	; MSB Mnemonic-Adresse -> D
+0162  cd 87 02       206    229 	CALL	TRBY		; Mnemonic ausgeben
+0165  d1             207    230 	POP	DE		; Disassemblieradr. wieder -> DE
+0166  78             208    231 	LD	A,B		; Befehlsbyte wieder -> A
+0167  fe 80          209    232 	CP	80H		; < 80 ?
+0169  d2 5d 02       210    233 	JP	NC,INAD		; nein, Workspace ausgeben und fertig
+016c  d5             211    234 	PUSH	DE		; Disassemblieradr. retten
+016d  d6 40          212    235 	SUB	40H		; LSB 1. Operanden in A
+016f  5f             213    236 	LD	E,A		; und -> E
+0170  16 06          214    237 	LD	D,OP2TAB > 8	; MSB 2. Operanden -> D
+0172  1a             215    238 	LD	A,(DE)		; 1. Operanden -> A
+0173  d1             216    239 	POP	DE		; akt. Disassemblieradr. wieder -> DE
+0174  cd 8b 01       217    240 	CALL	PRO1		; 1. Operanden ausgeben
+0177  78             218    241 	LD	A,B		; Befehlsbyte wieder -> A
+0178  fe 80          219    242 	CP	80H		; < 80 ?
+017a  d2 5d 02       220    243 	JP	NC,INAD		; ja, Workspace ausgeben und fertig
+017d  d5             221    244 	PUSH	DE		; akt. Disassemblieradr. retten
+017e  5f             222    245 	LD	E,A		; LSB Operandentabelle -> E
+017f  16 06          223    246 	LD	D,OP2TAB > 8	; MSB Operandentabelle -> D
+0181  1a             224    247 	LD	A,(DE)		; 2. Operanden -> A
+0182  cb f9          225    248 	SET	7,C		; Buchstabenflag setzen
+0184  d1             226    249 $DL52:	POP	DE		; akt. Disassemblieradr. retten
+0185  cd 8b 01       227    250 	CALL	PRO1		; 2. Operanden ausgeben
+0188  c3 5d 02       228    251 	JP	INAD		; fertig, Adresse merken und Workspace ausgeben
+                     229    252 
+                     230    253 	; Operand 1 ausgeben
+018b  fe ff          231    254 PRO1:	CP	0FFH		; leere Operand ?
+018d  c8             232    255 	RET	Z		; ja, fertig
+018e  fe 17          233    256 	CP	17H		; nein, Register "A" ausgeben ?
+0190  20 02          234    257 	JR	NZ,$DL01
+0192  3e 18          235    258 	LD	A,18H		; ja, umkodieren
+0194  fe 16          236    259 $DL01:	CP	16H		; Register "(HL)" ausgeben ?
+0196  20 02          237    260 	JR	NZ,$DL02
+0198  3e b4          238    261 	LD	A,0B4H		; ja, umkodieren
+019a  cb 79          239    262 $DL02:	BIT	7,C		; 2. Operand ?
+019c  28 03          240    263 	JR	Z,$DL03
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 6
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+019e  36 2c          241    264 	LD	(HL),','	; ja, "," ausgeben
+01a0  23             242    265 	INC	HL		; naechste Printposition -> HL
+01a1  cb 7f          243    266 $DL03:	BIT	7,A		; "(...)" ?
+01a3  28 03          244    267 	JR	Z,$DL04
+01a5  36 28          245    268 	LD	(HL),'('	; ja, "(" ausgeben
+01a7  23             246    269 	INC	HL		; naechste Printposition -> HL
+01a8  cb 67          247    270 $DL04:	BIT	4,A		; Buchstabe ?
+01aa  20 5b          248    271 	JR	NZ,PRBU		; ja, Buchstaben ausgeben
+01ac  cb 77          249    272 	BIT	6,A		; nein, Bitnummer/RST-Adresse ?
+01ae  20 1d          250    273 	JR	NZ,DIST		; ja, Distanz ausgeben
+01b0  cb 6f          251    274 	BIT	5,A		; nein, Bitnummer ?
+01b2  20 06          252    275 	JR	NZ,PRO2		; ja, RST ausgeben
+01b4  e6 07          253    276 	AND	7		; nein, Bits 3..7 loeschen
+01b6  cd bf 02       254    277 	CALL	PRCH		; Hexbyte ausgeben
+01b9  c9             255    278 	RET
+                     256    279 
+                     257    280 	; RST ausgeben
+01ba  f5             258    281 PRO2:	PUSH	AF		; A retten
+01bb  e6 06          259    282 	AND	6		; loesche Bits 0 und 4..7
+01bd  0f             260    283 	RRCA			; Division durch 2
+01be  cd bf 02       261    284 	CALL	PRCH		; oberes Nibble ausgeben
+01c1  f1             262    285 	POP	AF		; A wieder herstellen
+01c2  cb 47          263    286 	BIT	0,A		; RST x8 ?
+01c4  3e 30          264    287 	LD	A,'0'		; nein, "0" -> A
+01c6  28 02          265    288 	JR	Z,$DL05
+01c8  3e 38          266    289 	LD	A,'8'		; ja, "8" -> A
+01ca  77             267    290 $DL05:	LD	(HL),A		; "0" oder "8" ausgeben
+01cb  23             268    291 	INC	HL		; naechste Printposition -> HL
+01cc  c9             269    292 	RET
+                     270    293 
+                     271    294 	; Distanz ausgeben
+01cd  cb 47          272    295 DIST:	BIT	0,A		; relative Distanz ?
+01cf  28 1f          273    296 	JR	Z,PR_N		; nein, N ausgeben
+01d1  cd 9c 02       274    297 	CALL	PRNB		; Byte vorne ausgeben
+01d4  d5             275    298 	PUSH	DE		; akt. Disassemblieradr. retten
+01d5  1a             276    299 	LD	A,(DE)		; Distanzbyte -> A
+01d6  13             277    300 	INC	DE		; Disassemblieradr. erhoehen
+01d7  07             278    301 	RLCA			; Bit 7 Distanzbyte -> carry
+01d8  0f             279    302 	RRCA
+01d9  30 02          280    303 	JR	NC,$DL06	; Vorwaertsprung
+01db  cb c1          281    304 	SET	0,C		; Flag fuer Rueckwaertssprung setzen
+01dd  83             282    305 $DL06:	ADD	A,E		; Distanz zu PC addieren
+01de  5f             283    306 	LD	E,A
+01df  cb 41          284    307 	BIT	0,C		; Flag testen
+01e1  30 05          285    308 	JR	NC,$DL07	; kein Ueberlauf
+01e3  20 06          286    309 	JR	NZ,$DL08	; Rueckwaertssprung
+01e5  14             287    310 	INC	D		; MSB PC erhoehen
+01e6  18 03          288    311 	JR	$DL08		; Zieladresse ausgeben
+01e8  28 01          289    312 $DL07:	JR	Z,$DL08		; bei Vorwaertssprung Zieladresse ausgeben
+01ea  15             290    313 	DEC	D		; sonst MSB PC erniedrigen
+01eb  cd ad 02       291    314 $DL08:	CALL	PRBY		; Zieladresse in DE ausgeben
+01ee  d1             292    315 	POP	DE		; akt. Disassemblieradresse wieder -> DE
+01ef  c9             293    316 	RET
+                     294    317 
+                     295    318 	; N ausgeben
+01f0  f5             296    319 PR_N:	PUSH	AF		; A retten
+01f1  cb 4f          297    320 	BIT	1,A		; N ?
+01f3  28 05          298    321 	JR	Z,PRNN		; nein, NN ausgeben
+01f5  cd 92 02       299    322 	CALL	PRVH		; ja, Byte vorne und hinten ausgeben
+01f8  18 54          300    323 	JR	$DL12		; ")" bearbeiten
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 7
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                     301    324 
+                     302    325 	; NN ausgeben
+01fa  cd 9c 02       303    326 PRNN:	CALL	PRNB		; Byte vorne ausgeben
+01fd  cd 92 02       304    327 	CALL	PRVH		; Byte vorne und hinten ausgeben
+0200  1b             305    328 	DEC	DE		; DE -> LSB von NN
+0201  cd 95 02       306    329 	CALL	PRBH		; Byte hinten ausgeben
+0204  13             307    330 	INC	DE		; akt. Disassemblieradr. wieder -> DE
+0205  18 47          308    331 	JR	$DL12		; ")" bearbeiten
+                     309    332 
+                     310    333 	; Buchstaben ausgeben
+0207  f5             311    334 PRBU:	PUSH	AF		; A retten
+0208  c5             312    335 	PUSH	BC		; Flags in C retten
+0209  d5             313    336 	PUSH	DE		; akt. Disassemblieradr. retten
+020a  06 01          314    337 	LD	B,1		; Anzahl = 1
+020c  11 f0 04       315    338 	LD	DE,REGTAB	; DE zeigt auf die Register-Namen
+020f  cb 6f          316    339 	BIT	5,A		; 2 Buchstaben ?
+0211  28 01          317    340 	JR	Z,$DL09
+0213  04             318    341 	INC	B		; ja, Anzahl erhoehen
+0214  cb 77          319    342 $DL09:	BIT	6,A		; Sprungbedingung ?
+0216  28 03          320    343 	JR	Z,$DL10
+0218  11 e0 04       321    344 	LD	DE,SPRTAB	; ja, DE zeigt auf Condition-Namen
+021b  cb bf          322    345 $DL10:	RES	7,A		; Klammer-Bit loeschen
+021d  fe 34          323    346 	CP	34H		; "(HL)" ?
+021f  20 0c          324    347 	JR	NZ,$DL11
+0221  cb 69          325    348 	BIT	5,C		; ja, Indexregister ?
+0223  28 08          326    349 	JR	Z,$DL11
+0225  3e 0a          327    350 	LD	A,0AH		; ja, A -> IX-Register
+0227  cb 71          328    351 	BIT	6,C		; IY-Register ?
+0229  28 02          329    352 	JR	Z,$DL11
+022b  3e 0c          330    353 	LD	A,0CH		; ja, A -> IY-Register
+022d  e6 0f          331    354 $DL11:	AND	0FH		; loesche oberes Nibble
+022f  83             332    355 	ADD	A,E		; und addiere zur Basis in DE
+0230  5f             333    356 	LD	E,A
+0231  1a             334    357 $DL50:	LD	A,(DE)		; Zeichen -> A
+0232  77             335    358 	LD	(HL),A		; Zeichen ausgeben
+0233  13             336    359 	INC	DE		; Tabellen-Adresse erhoehen
+0234  23             337    360 	INC	HL		; naechste Printposition
+0235  10 fa          338    361 	DJNZ	$DL50		; naechstes Zeichen
+0237  d1             339    362 	POP	DE		; Register wieder herstellen
+0238  c1             340    363 	POP	BC
+0239  f1             341    364 	POP	AF
+023a  f5             342    365 	PUSH	AF		; A retten
+023b  fe b4          343    366 	CP	0B4H		; "(HL)" ?
+023d  20 0f          344    367 	JR	NZ,$DL12
+023f  cb 69          345    368 	BIT	5,C		; nein, Indexregister ?
+0241  28 0b          346    369 	JR	Z,$DL12
+0243  1a             347    370 	LD	A,(DE)		; ja, Befehlsbyte nach DD/FD -> A
+0244  fe e9          348    371 	CP	0E9H		; "JP (IX/IY)" ?
+0246  28 06          349    372 	JR	Z,$DL12
+0248  36 2b          350    373 	LD	(HL),'+'	; nein, "+" ausgeben
+024a  23             351    374 	INC	HL		; naechste Printposition
+024b  cd 92 02       352    375 	CALL	PRVH		; Offset ausgeben
+024e  f1             353    376 $DL12:	POP	AF		; A wieder herstellen
+024f  cb 7f          354    377 	BIT	7,A		; "()" ?
+0251  c8             355    378 	RET	Z		; nein, fertig
+0252  36 29          356    379 	LD	(HL),')'	; ja, ")" ausgeben
+0254  23             357    380 	INC	HL		; naechste Printposition
+0255  c9             358    381 	RET
+                     359    382 
+                     360    383 	; Error
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 8
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0256  11 98 06       361    384 ERRO:	LD	DE,CBMTAB+24	; Pointer auf "????" -> DE
+0259  cd 87 02       362    385 	CALL	TRBY		; als Mnemonic ausgeben
+025c  d1             363    386 	POP	DE		; akt. Disassemblieradr. vom Stack holen
+                     364    387 	
+                     365    388 	; Disassemblier-Adresse erhoehen und merken
+025d  13             366    389 INAD:	INC	DE
+025e  ed 53 c7 06    367    390 	LD	(DADR),DE
+                     368    391 
+                     369    392 	; Workspace ausgeben
+0262  f5             370    393 PRWO:	PUSH	AF		; Register retten
+0263  c5             371    394 	PUSH	BC
+0264  d5             372    395 	PUSH	DE
+0265  e5             373    396 	PUSH	HL
+0266  21 a3 06       374    397 	LD	HL,WRKS		; Adresse Workspace -> HL
+0269  cd 10 00       375    398 	CALL	PRTSTR		; Workspace aufs Terminal ausgeben
+026c  21 a0 06       376    399 	LD	HL,NL		; Adresse Newline-String -> HL
+026f  cd 10 00       377    400 	CALL	PRTSTR		; Newline ausgeben
+0272  e1             378    401 	POP	HL		; Register wieder herstellen
+0273  d1             379    402 	POP	DE
+0274  c1             380    403 	POP	BC
+0275  f1             381    404 	POP	AF
+0276  c9             382    405 	RET
+                     383    406 	
+                     384    407 	; Workspace loeschen
+0277  21 a3 06       385    408 CLWO:	LD	HL,WRKS		; Workspace mit Space fuellen
+027a  11 a4 06       386    409 	LD	DE,WRKS+1	; und mit Null terminieren
+027d  36 20          387    410 	LD	(HL),32
+027f  01 20 00       388    411 	LD	BC,32
+0282  ed b0          389    412 	LDIR
+0284  af             390    413 	XOR	A
+0285  12             391    414 	LD	(DE),A
+0286  c9             392    415 	RET
+                     393    416 
+                     394    417 	; 4 Bytes transferieren
+0287  c5             395    418 TRBY:	PUSH	BC		; BC retten
+0288  01 04 00       396    419 	LD	BC,4		; 4 Bytes 
+028b  eb             397    420 	EX	DE,HL		; DE=Printposition, HL=Mnemonic
+028c  ed b0          398    421 	LDIR			; Bytes transferieren
+028e  eb             399    422 	EX	DE,HL		; HL ist wieder Printposition
+028f  c1             400    423 	POP	BC		; BC wieder herstellen
+0290  23             401    424 	INC	HL		; Leerzeichen
+0291  c9             402    425 	RET
+                     403    426 
+                     404    427 	; Byte vorne und hinten ausgeben
+0292  cd 9c 02       405    428 PRVH:	CALL	PRNB		; Byte vorne ausgeben
+                     406    429 
+                     407    430 	; Byte hinten ausgeben
+0295  f5             408    431 PRBH:	PUSH	AF		; A retten
+0296  1a             409    432 	LD	A,(DE)		; Byte -> A
+0297  cd b2 02       410    433 	CALL	PRAK		; A ausgeben
+029a  f1             411    434 	POP	AF		; A wieder herstellen
+029b  c9             412    435 	RET
+                     413    436 
+                     414    437 	; Byte vorne ausgeben
+029c  f5             415    438 PRNB:	PUSH	AF		; A retten
+029d  13             416    439 	INC	DE		; DE auf naechstes Byte setzen
+029e  e5             417    440 	PUSH	HL		; akt. Printposition retten
+029f  2a c5 06       418    441 	LD	HL,(PRTMP)	; vordere Printposition -> HL
+02a2  1a             419    442 	LD	A,(DE)		; Byte -> A
+02a3  cd b2 02       420    443 	CALL	PRAK		; A ausgeben
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 9
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+02a6  23             421    444 	INC HL			; Leerzeichen
+02a7  22 c5 06       422    445 	LD	(PRTMP),HL	; vordere Printposition retten
+02aa  e1             423    446 	POP	HL		; akt. Printposition wieder -> HL
+02ab  f1             424    447 	POP	AF		; A wieder herstellen
+02ac  c9             425    448 	RET
+                     426    449 
+                     427    450 	; DE ausgeben
+02ad  7a             428    451 PRBY:	LD	A,D		; MSB -> A
+02ae  cd b2 02       429    452 	CALL	PRAK		; A ausgeben
+02b1  7b             430    453 	LD	A,E		; LSB -> A
+                     431    454 
+                     432    455 	; A ausgeben
+02b2  f5             433    456 PRAK:	PUSH	AF		; A retten
+02b3  0f             434    457 	RRCA			; oberes Nibble ins untere schieben
+02b4  0f             435    458 	RRCA
+02b5  0f             436    459 	RRCA
+02b6  0f             437    460 	RRCA
+02b7  cd bf 02       438    461 	CALL	PRCH		; oberes Nibble ausgeben
+02ba  f1             439    462 	POP	AF		; A wieder herstellen
+02bb  cd bf 02       440    463 	CALL	PRCH		; unteres Nibble ausgeben
+02be  c9             441    464 	RET
+                     442    465 
+                     443    466 	; unteres Nibble in ASCII-Hex umwandeln und in Workspace schreiben
+02bf  e6 0f          444    467 PRCH:	AND	0FH
+02c1  c6 90          445    468 	ADD	A,90H
+02c3  27             446    469 	DAA
+02c4  ce 40          447    470 	ADC	A,40H
+02c6  27             448    471 	DAA
+02c7  77             449    472 	LD	(HL),A		; ASCII-Ziffer in Workspace schreiben
+02c8  23             450    473 	INC	HL		; Printposition erhoehen
+02c9  c9             451    474 	RET
+                     452    475 
+                     453    476 	; Die hier folgenden Tabellen muessen am Anfang einer Page
+                     454    477 	; beginnen, und die Reihenfolge der Tabellen darf auf keinen
+                     455    478 	; Fall geaendert werden, weil das LSB der Tabellenadressen
+                     456    479 	; durch arithmetische Operationen mit den Op-Codes berechnet
+                     457    480 	; wird !!!
+                     458    481 
+02ca                 459    482 	DEFS	256 - ($ & 0FFH)
+                     460    483 
+                     461    484 MNETAB:		; Tabelle mit den Z80-Mnemonics
+0300  41 44 44 20    462    485 	DEFM	'ADD ADC '
+0304  41 44 43 20    462    486
+0308  53 55 42 20    463    487 	DEFM	'SUB SBC '
+030c  53 42 43 20    463    488
+0310  41 4e 44 20    464    489 	DEFM	'AND XOR '
+0314  58 4f 52 20    464    490
+0318  4f 52 20 20    465    491 	DEFM	'OR  CP  '
+031c  43 50 20 20    465    492
+0320  4a 52 20 20    466    493 	DEFM	'JR  NOP '
+0324  4e 4f 50 20    466    494
+0328  44 4a 4e 5a    467    495 	DEFM	'DJNZEX  '
+032c  45 58 20 20    467    496
+0330  52 4c 43 41    468    497 	DEFM	'RLCARLA '
+0334  52 4c 41 20    468    498
+0338  44 41 41 20    469    499 	DEFM	'DAA SCF '
+033c  53 43 46 20    469    500
+0340  52 52 43 41    470    501 	DEFM	'RRCARRA '
+0344  52 52 41 20    470    502
+0348  43 50 4c 20    471    503 	DEFM	'CPL CCF '
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 10
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+034c  43 43 46 20    471    504
+0350  4c 44 20 20    472    505 	DEFM	'LD  INC '
+0354  49 4e 43 20    472    506
+0358  44 45 43 20    473    507 	DEFM	'DEC HALT'
+035c  48 41 4c 54    473    508
+0360  52 45 54 20    474    509 	DEFM	'RET POP '
+0364  50 4f 50 20    474    510
+0368  4a 50 20 20    475    511 	DEFM	'JP  OUT '
+036c  4f 55 54 20    475    512
+0370  45 58 20 20    476    513 	DEFM	'EX  DI  '
+0374  44 49 20 20    476    514
+0378  43 41 4c 4c    477    515 	DEFM	'CALLPUSH'
+037c  50 55 53 48    477    516
+0380  52 53 54 20    478    517 	DEFM	'RST EXX '
+0384  45 58 58 20    478    518
+0388  49 4e 20 20    479    519 	DEFM	'IN  EX  '
+038c  45 58 20 20    479    520
+0390  45 49 20 20    480    521 	DEFM	'EI  LDI '
+0394  4c 44 49 20    480    522
+0398  4c 44 49 52    481    523 	DEFM	'LDIRINI '
+039c  49 4e 49 20    481    524
+03a0  49 4e 49 52    482    525 	DEFM	'INIROUTI'
+03a4  4f 55 54 49    482    526
+03a8  4f 54 49 52    483    527 	DEFM	'OTIRNEG '
+03ac  4e 45 47 20    483    528
+03b0  52 45 54 4e    484    529 	DEFM	'RETNRRD '
+03b4  52 52 44 20    484    530
+03b8  4c 44 44 20    485    531 	DEFM	'LDD LDDR'
+03bc  4c 44 44 52    485    532
+03c0  43 50 44 20    486    533 	DEFM	'CPD CPDR'
+03c4  43 50 44 52    486    534
+03c8  49 4e 44 20    487    535 	DEFM	'IND INDR'
+03cc  49 4e 44 52    487    536
+03d0  4f 54 44 52    488    537 	DEFM	'OTDROUTD'
+03d4  4f 55 54 44    488    538
+03d8  52 45 54 49    489    539 	DEFM	'RETIRLD '
+03dc  52 4c 44 20    489    540
+03e0  42 49 54 20    490    541 	DEFM	'BIT RES '
+03e4  52 45 53 20    490    542
+03e8  53 45 54 20    491    543 	DEFM	'SET ????'
+03ec  3f 3f 3f 3f    491    544
+03f0  43 50 49 20    492    545 	DEFM	'CPI CPIR'
+03f4  43 50 49 52    492    546
+03f8  49 4d 20 20    493    547 	DEFM	'IM  ----'
+03fc  2d 2d 2d 2d    493    548
+                     494    549 
+                     495    550 CODTAB:		; LSB-Adressen der Mnemonics in MNETAB fuer
+                     496    551 		; Befehle 00..3F ohne Preafix ED/CB
+                     497    552 
+0400  24 50 50 54    498    553 	DEFB	024H,050H,050H,054H,054H,058H,050H,030H	; NOP  LD   LD   INC  INC  DEC  LD   RLCA
+0404  54 58 50 30    498    554
+0408  70 00 50 58    499    555 	DEFB	070H,000H,050H,058H,054H,058H,050H,040H	; EX   ADD  LD   DEC  INC  DEC  LD   RRCA
+040c  54 58 50 40    499    556
+0410  28 50 50 54    500    557 	DEFB	028H,050H,050H,054H,054H,058H,050H,034H	; DJNZ LD   LD   INC  INC  DEC  LD   RLA
+0414  54 58 50 34    500    558
+0418  20 00 50 58    501    559 	DEFB	020H,000H,050H,058H,054H,058H,050H,044H	; JR   ADD  LD   DEC  INC  DEC  LD   RRA
+041c  54 58 50 44    501    560
+0420  20 50 50 54    502    561 	DEFB	020H,050H,050H,054H,054H,058H,050H,038H	; JR   LD   LD   INC  INC  DEC  LD   DAA
+0424  54 58 50 38    502    562
+0428  20 00 50 58    503    563 	DEFB	020H,000H,050H,058H,054H,058H,050H,048H	; JR   ADD  LD   DEC  INC  DEC  LD   CPL
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 11
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+042c  54 58 50 48    503    564
+0430  20 50 50 54    504    565 	DEFB	020H,050H,050H,054H,054H,058H,050H,03CH	; JR   LD   LD   INC  INC  DEC  LD   SCF
+0434  54 58 50 3c    504    566
+0438  20 00 50 58    505    567 	DEFB	020H,000H,050H,058H,054H,058H,050H,04CH	; JR   ADD  LD   DEC  INC  DEC  LD   CCF
+043c  54 58 50 4c    505    568
+                     506    569 
+                     507    570 		; LSB-Adressen der Mnemonics in MNETAB fuer
+                     508    571 		; Befehle C0..FF ohne Preafix ED/CB
+                     509    572 
+0440  60 64 68 68    510    573 	DEFB	060H,064H,068H,068H,078H,07CH,000H,080H	; RET  POP  JP   JP   CALL PUSH ADD  RET
+0444  78 7c 00 80    510    574
+0448  60 60 68 f1    511    575 	DEFB	060H,060H,068H,0F1H,078H,078H,004H,080H	; RET  RET  JP   (CB) CALL CALL ADC  RST
+044c  78 78 04 80    511    576
+0450  60 64 68 6c    512    577 	DEFB	060H,064H,068H,06CH,078H,07CH,008H,080H	; RET  POP  JP   OUT  CALL PUSH SUB  RST
+0454  78 7c 08 80    512    578
+0458  60 84 68 88    513    579 	DEFB	060H,084H,068H,088H,078H,0F0H,00CH,080H	; RET  EXX  JP   IN   CALL (DD) SBC  RST
+045c  78 f0 0c 80    513    580
+0460  60 64 68 70    514    581 	DEFB	060H,064H,068H,070H,078H,07CH,010H,080H	; RET  POP  JP   EX   CALL PUSH AND  RST
+0464  78 7c 10 80    514    582
+0468  60 68 68 2c    515    583 	DEFB	060H,068H,068H,02CH,078H,0F2H,014H,080H	; RET  JP   JP   EX   CALL (ED) XOR  RST
+046c  78 f2 14 80    515    584
+0470  60 64 68 74    516    585 	DEFB	060H,064H,068H,074H,078H,07CH,018H,080H	; RET  POP  JP   DI   CALL PUSH OR   RST
+0474  78 7c 18 80    516    586
+0478  60 50 68 90    517    587 	DEFB	060H,050H,068H,090H,078H,0F8H,01CH,080H	; RET  LD   JP   EI   CALL (FD) CP   RST
+047c  78 f8 1c 80    517    588
+                     518    589 
+                     519    590 		; LSB-Adressen der Mnemonics in MNETAB fuer
+                     520    591 		; Befehle 40..7F mit Preafix ED
+                     521    592 
+0480  88 6c 0c 50    522    593 	DEFB	088H,06CH,00CH,050H,0ACH,0B0H,0F8H,050H	; IN   OUT  SBC  LD   NEG  RETN IM   LD
+0484  ac b0 f8 50    522    594
+0488  88 6c 04 50    523    595 	DEFB	088H,06CH,004H,050H,0FFH,0D8H,0FFH,050H	; IN   OUT  ADC  LD        RETI      LD
+048c  ff d8 ff 50    523    596
+0490  88 6c 0c 50    524    597 	DEFB	088H,06CH,00CH,050H,0FFH,0FFH,0F8H,050H	; IN   OUT  SBC  LD             IM   LD
+0494  ff ff f8 50    524    598
+0498  88 6c 04 50    525    599 	DEFB	088H,06CH,004H,050H,0FFH,0FFH,0F8H,050H	; IN   OUT  ADC  LD             IM   LD
+049c  ff ff f8 50    525    600
+04a0  88 6c 0c ff    526    601 	DEFB	088H,06CH,00CH,0FFH,0FFH,0FFH,0FFH,0B4H	; IN   OUT  SBC                      RRD
+04a4  ff ff ff b4    526    602
+04a8  88 6c 04 ff    527    603 	DEFB	088H,06CH,004H,0FFH,0FFH,0FFH,0FFH,0DCH	; IN   OUT  ADC                      RLD
+04ac  ff ff ff dc    527    604
+04b0  ff ff 0c 50    528    605 	DEFB	0FFH,0FFH,00CH,050H,0FFH,0FFH,0FFH,0FFH	;           SBC  LD
+04b4  ff ff ff ff    528    606
+04b8  88 6c 04 50    529    607 	DEFB	088H,06CH,004H,050H,0FFH,0FFH,0FFH,0FFH	; IN   OUT  ADC  LD
+04bc  ff ff ff ff    529    608
+                     530    609 
+                     531    610 		; LSB-Adressen der Mnemonics in MNETAB fuer
+                     532    611 		; Befehle A0..BF mit Praefix ED
+                     533    612 
+04c0  94 f0 9c a4    534    613 	DEFB	094H,0F0H,09CH,0A4H,0FFH,0FFH,0FFH,0FFH	; LDI  CPI  INI  OUTI
+04c4  ff ff ff ff    534    614
+04c8  b8 c0 c8 d4    535    615 	DEFB	0B8H,0C0H,0C8H,0D4H,0FFH,0FFH,0FFH,0FFH	; LDD  CPD  IND  OUTD
+04cc  ff ff ff ff    535    616
+04d0  98 f4 a0 a8    536    617 	DEFB	098H,0F4H,0A0H,0A8H,0FFH,0FFH,0FFH,0FFH	; LDIR CPIR INIR OTIR
+04d4  ff ff ff ff    536    618
+04d8  bc c4 cc d0    537    619 	DEFB	0BCH,0C4H,0CCH,0D0H,0FFH,0FFH,0FFH,0FFH	; LDDR CPDR INDR OTDR
+04dc  ff ff ff ff    537    620
+                     538    621 
+                     539    622 SPRTAB:		; Tabelle der Sprungbedingungen
+                     540    623 
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 12
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+04e0  4e 5a 4e 43    541    624 	DEFM	'NZNCPOPEPM'
+04e4  50 4f 50 45    541    625
+04e8  50 4d          541    626
+04ea  ff ff ff ff    542    627 	DEFB	0FFH,0FFH,0FFH,0FFH,0FFH,0FFH
+04ee  ff ff          542    628
+                     543    629 
+                     544    630 REGTAB:		; Tabelle der Register
+                     545    631 
+04f0  42 43 44 45    546    632 	DEFM	'BCDEHLSPAFIXIYIR'
+04f4  48 4c 53 50    546    633
+04f8  41 46 49 58    546    634
+04fc  49 59 49 52    546    635
+                     547    636 
+                     548    637 OPETAB:		; Tabelle der Operanden:
+                     549    638 		;	Bit 7: Zahl/Buchstabe
+                     550    639 		;	Bit 6: einfach/doppelt
+                     551    640 		;	Bit 5: Register/Sprungbedingung
+                     552    641 		;	Bit 4: ohne/mit Klammer
+                     553    642 		;	Bit 0..3: Offset in der Tabelle der Registernamen
+                     554    643 
+                     555    644 		; Befehle 00..3F ohne Preafix ED/CB
+                     556    645 		; 1. Operand
+                     557    646 
+0500  ff 30 b0 30    558    647 	DEFB	0FFH,030H,0B0H,030H,010H,010H,010H,0FFH	; -    BC   (BC) BC   B    B    B    -
+0504  10 10 10 ff    558    648
+0508  38 34 17 30    559    649 	DEFB	038H,034H,017H,030H,011H,011H,011H,0FFH	; AF   HL   A    BC   C    C    C    -
+050c  11 11 11 ff    559    650
+0510  41 32 b2 32    560    651 	DEFB	041H,032H,0B2H,032H,012H,012H,012H,0FFH	; DIS  DE   (DE) DE   D    D    D    -
+0514  12 12 12 ff    560    652
+0518  41 34 17 32    561    653 	DEFB	041H,034H,017H,032H,013H,013H,013H,0FFH	; DIS  HL   A    DE   E    E    E    -
+051c  13 13 13 ff    561    654
+0520  70 34 c4 34    562    655 	DEFB	070H,034H,0C4H,034H,014H,014H,014H,0FFH	; NZ   HL   (NN) HL   H    H    H    -
+0524  14 14 14 ff    562    656
+0528  51 34 34 34    563    657 	DEFB	051H,034H,034H,034H,015H,015H,015H,0FFH	; Z    HL   HL   HL   L    L    L    -
+052c  15 15 15 ff    563    658
+0530  72 36 c4 36    564    659 	DEFB	072H,036H,0C4H,036H,016H,016H,016H,0FFH	; NC   SP   (NN) SP   (HL) (HL) (HL) -
+0534  16 16 16 ff    564    660
+0538  11 34 17 36    565    661 	DEFB	011H,034H,017H,036H,017H,017H,017H,0FFH	; C    HL   A    SP   A    A    A    -
+053c  17 17 17 ff    565    662
+                     566    663 
+                     567    664 		; Befehle C0..FF ohne Preafix ED/CB
+                     568    665 		; 1. Operand
+                     569    666 
+0540  70 30 70 44    570    667 	DEFB	070H,030H,070H,044H,070H,030H,017H,020H	; NZ   BC   NZ   NN   NZ   BC   A    00
+0544  70 30 17 20    570    668
+0548  51 ff 51 f1    571    669 	DEFB	051H,0FFH,051H,0F1H,051H,044H,017H,021H	; Z    -    Z    *CB  Z    NN   A    08
+054c  51 44 17 21    571    670
+0550  72 32 72 c2    572    671 	DEFB	072H,032H,072H,0C2H,072H,032H,042H,022H	; NC   DE   NC   (N)  NC   DE   N    10
+0554  72 32 42 22    572    672
+0558  53 ff 53 17    573    673 	DEFB	053H,0FFH,053H,017H,053H,0F2H,017H,023H	; C    -    C    A    C    *DD  A    18
+055c  53 f2 17 23    573    674
+0560  74 34 74 b6    574    675 	DEFB	074H,034H,074H,0B6H,074H,034H,042H,024H	; PO   HL   PO   (SP) PO   HL   N    20
+0564  74 34 42 24    574    676
+0568  76 16 76 32    575    677 	DEFB	076H,016H,076H,032H,076H,0F4H,042H,025H	; PE   (HL) PE   DE   PE   *ED  N    28
+056c  76 f4 42 25    575    678
+0570  58 38 58 ff    576    679 	DEFB	058H,038H,058H,0FFH,058H,038H,042H,026H	; P    AF   P    -    P    AF   N    30
+0574  58 38 42 26    576    680
+0578  59 36 59 ff    577    681 	DEFB	059H,036H,059H,0FFH,059H,0F8H,042H,027H	; M    SP   M    -    M    *FD  N    38
+057c  59 f8 42 27    577    682
+                     578    683 
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 13
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                     579    684 		; Befehle 00..3F ohne Preafix ED/CB
+                     580    685 		; 2. Operand
+                     581    686 
+0580  ff 44 17 ff    582    687 	DEFB	0FFH,044H,017H,0FFH,0FFH,0FFH,042H,0FFH	; -    NN   A    -    -    -    N    -
+0584  ff ff 42 ff    582    688
+0588  38 30 b0 ff    583    689 	DEFB	038H,030H,0B0H,0FFH,0FFH,0FFH,042H,0FFH	; AF   BC   (BC) -    -    -    N    -
+058c  ff ff 42 ff    583    690
+0590  ff 44 17 ff    584    691 	DEFB	0FFH,044H,017H,0FFH,0FFH,0FFH,042H,0FFH	; -    NN   A    -    -    -    N    -
+0594  ff ff 42 ff    584    692
+0598  ff 32 b2 ff    585    693 	DEFB	0FFH,032H,0B2H,0FFH,0FFH,0FFH,042H,0FFH	; -    DE   (DE) -    -    -    N    -
+059c  ff ff 42 ff    585    694
+05a0  41 44 34 ff    586    695 	DEFB	041H,044H,034H,0FFH,0FFH,0FFH,042H,0FFH	; DIS  NN   HL   -    -    -    N    -
+05a4  ff ff 42 ff    586    696
+05a8  41 34 c4 ff    587    697 	DEFB	041H,034H,0C4H,0FFH,0FFH,0FFH,042H,0FFH	; DIS  HL   (NN) -    -    -    N    -
+05ac  ff ff 42 ff    587    698
+05b0  41 44 17 ff    588    699 	DEFB	041H,044H,017H,0FFH,0FFH,0FFH,042H,0FFH	; DIS  NN   A    -    -    -    N    -
+05b4  ff ff 42 ff    588    700
+05b8  41 36 c4 ff    589    701 	DEFB	041H,036H,0C4H,0FFH,0FFH,0FFH,042H,0FFH	; DIS  SP   (NN) -    -    -    N    -
+05bc  ff ff 42 ff    589    702
+                     590    703 
+                     591    704 		; Befehle C0..FF ohne Praefix ED/CB
+                     592    705 		; 2. Operand
+                     593    706 
+05c0  ff ff 44 ff    594    707 	DEFB	0FFH,0FFH,044H,0FFH,044H,0FFH,042H,0FFH	; -    -    NN   -    NN   -    N    -
+05c4  44 ff 42 ff    594    708
+05c8  ff ff 44 ff    595    709 	DEFB	0FFH,0FFH,044H,0FFH,044H,0FFH,042H,0FFH	; -    -    NN   *CB  NN   -    N    -
+05cc  44 ff 42 ff    595    710
+05d0  ff ff 44 17    596    711 	DEFB	0FFH,0FFH,044H,017H,044H,0FFH,0FFH,0FFH	; -    -    NN   A    NN   -    -    -
+05d4  44 ff ff ff    596    712
+05d8  ff ff 44 c2    597    713 	DEFB	0FFH,0FFH,044H,0C2H,044H,0FFH,042H,0FFH	; -    -    NN   (N)  NN   *DD  N    -
+05dc  44 ff 42 ff    597    714
+05e0  ff ff 44 34    598    715 	DEFB	0FFH,0FFH,044H,034H,044H,0FFH,0FFH,0FFH	; -    -    NN   HL   NN   -    -    -
+05e4  44 ff ff ff    598    716
+05e8  ff ff 44 34    599    717 	DEFB	0FFH,0FFH,044H,034H,044H,0FFH,0FFH,0FFH	; -    -    NN   HL   NN   *ED  -    -
+05ec  44 ff ff ff    599    718
+05f0  ff ff 44 ff    600    719 	DEFB	0FFH,0FFH,044H,0FFH,044H,0FFH,0FFH,0FFH	; -    -    NN   -    NN   -    -    -
+05f4  44 ff ff ff    600    720
+05f8  ff 34 44 ff    601    721 	DEFB	0FFH,034H,044H,0FFH,044H,0FFH,0FFH,0FFH	; -    HL   NN   -    NN   *FD  -    -
+05fc  44 ff ff ff    601    722
+                     602    723 
+                     603    724 OP2TAB:		; Befehle 40..7F mit Praefix ED
+                     604    725 		; 1. Operand
+                     605    726 
+0600  10 91 34 c4    606    727 	DEFB	010H,091H,034H,0C4H,0FFH,0FFH,000H,01EH	; B    (C)  HL   (NN) -    -    0    I
+0604  ff ff 00 1e    606    728
+0608  11 91 34 30    607    729 	DEFB	011H,091H,034H,030H,0FFH,0FFH,0FFH,01FH	; C    (C)  HL   BC   -    -    -    R
+060c  ff ff ff 1f    607    730
+0610  12 91 34 c4    608    731 	DEFB	012H,091H,034H,0C4H,0FFH,0FFH,001H,017H	; D    (C)  HL   (NN) -    -    1    A
+0614  ff ff 01 17    608    732
+0618  13 91 34 32    609    733 	DEFB	013H,091H,034H,032H,0FFH,0FFH,002H,017H	; E    (C)  HL   DE   -    -    2    A
+061c  ff ff 02 17    609    734
+0620  14 91 34 c4    610    735 	DEFB	014H,091H,034H,0C4H,0FFH,0FFH,076H,0FFH	; H    (C)  HL   -    -    -    -    -
+0624  ff ff 76 ff    610    736
+0628  15 91 34 ff    611    737 	DEFB	015H,091H,034H,0FFH,0FFH,0FFH,0FFH,0FFH	; L    (C)  HL   -    -    -    -    -
+062c  ff ff ff ff    611    738
+0630  ff ff 34 c4    612    739 	DEFB	0FFH,0FFH,034H,0C4H,0FFH,0FFH,0FFH,0FFH	; -    -    HL   (NN) -    -    -    -
+0634  ff ff ff ff    612    740
+0638  17 91 34 36    613    741 	DEFB	017H,091H,034H,036H,0FFH,0FFH,0FFH,0FFH	; A    (C)  HL   SP   -    -    -    -
+063c  ff ff ff ff    613    742
+                     614    743 
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 14
+Source file: z80dis.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                     615    744 		; Befehle 40..7F mit Preafix ED
+                     616    745 		; 2. Operand
+                     617    746 
+0640  91 10 30 30    618    747 	DEFB	091H,010H,030H,030H,0FFH,0FFH,0FFH,017H	; (C)  B    BC   BC   -    -    -    A
+0644  ff ff ff 17    618    748
+0648  91 11 30 c4    619    749 	DEFB	091H,011H,030H,0C4H,0FFH,0FFH,0FFH,017H	; (C)  C    BC   (NN) -    -    -    A
+064c  ff ff ff 17    619    750
+0650  91 12 32 32    620    751 	DEFB	091H,012H,032H,032H,0FFH,0FFH,0FFH,01EH	; (C)  D    DE   DE   -    -    -    I
+0654  ff ff ff 1e    620    752
+0658  91 13 32 c4    621    753 	DEFB	091H,013H,032H,0C4H,0FFH,0FFH,0FFH,01FH	; (C)  E    DE   (NN) -    -    -    R
+065c  ff ff ff 1f    621    754
+0660  91 14 34 34    622    755 	DEFB	091H,014H,034H,034H,0FFH,0FFH,0FFH,0FFH	; (C)  H    HL   -    -    -    -    -
+0664  ff ff ff ff    622    756
+0668  91 15 34 ff    623    757 	DEFB	091H,015H,034H,0FFH,0FFH,0FFH,0FFH,0FFH	; (C)  L    HL   -    -    -    -    -
+066c  ff ff ff ff    623    758
+0670  ff ff 36 36    624    759 	DEFB	0FFH,0FFH,036H,036H,0FFH,0FFH,0FFH,0FFH	; -    -    SP   SP   -    -    -    -
+0674  ff ff ff ff    624    760
+0678  91 17 36 c4    625    761 	DEFB	091H,017H,036H,0C4H,0FFH,0FFH,0FFH,0FFH	; (C)  A    SP   (NN) -    -    -    -
+067c  ff ff ff ff    625    762
+                     626    763 
+                     627    764 CBMTAB:		; Tabelle der Mnemonics mit Praefix CB
+0680  52 4c 43 20    628    765 	DEFM	'RLC RRC '
+0684  52 52 43 20    628    766
+0688  52 4c 20 20    629    767 	DEFM	'RL  RR  '
+068c  52 52 20 20    629    768
+0690  53 4c 41 20    630    769 	DEFM	'SLA SRA '
+0694  53 52 41 20    630    770
+0698  3f 3f 3f 3f    631    771 	DEFM	'????SRL '
+069c  53 52 4c 20    631    772
+                     632    773 
+                     633    774 NL:		; Null-terminiertes Newline fuers Terminal
+06a0  0a 0d 00       634    775 	DEFB	10,13,0
+                     635    776 
+06a3                 636    777 WRKS:	DEFS	34		; Workspace zur Aufbereitung einer Ausgabezeile
+06c5                 637    778 PRTMP:	DEFS	2		; temoraerer Speicher fuer Printposition
+06c7                 638    779 DADR:	DEFS	2		; Disassemblier-Adresse
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 15
+Source file: z80main.asm
+Title:       Z80-Disassembler
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                      24    780 	INCLUDE z80ops.asm
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 16
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1    781 	TITLE	'Z80 Instruction Set in alphabetical order'
+                       2    782 
+0005                   3    783 IND	EQU	5
+0010                   4    784 M	EQU	10H
+0020                   5    785 N	EQU	20H
+0030                   6    786 DIS	EQU	30H
+                       7    787 
+                       8    788 Z80OPS:
+06c9  8e               9    789 	ADC	A,(HL)
+06ca  dd 8e 05        10    790 	ADC	A,(IX+IND)
+06cd  fd 8e 05        11    791 	ADC	A,(IY+IND)
+06d0  8f              12    792 	ADC	A,A
+06d1  88              13    793 	ADC	A,B
+06d2  89              14    794 	ADC	A,C
+06d3  8a              15    795 	ADC	A,D
+06d4  8b              16    796 	ADC	A,E
+06d5  8c              17    797 	ADC	A,H
+06d6  8d              18    798 	ADC	A,L
+06d7  ce 20           19    799 	ADC	A,N
+06d9  ed 4a           20    800 	ADC	HL,BC
+06db  ed 5a           21    801 	ADC	HL,DE
+06dd  ed 6a           22    802 	ADC	HL,HL
+06df  ed 7a           23    803 	ADC	HL,SP
+06e1  86              24    804 	ADD	A,(HL)
+06e2  dd 86 05        25    805 	ADD	A,(IX+IND)
+06e5  fd 86 05        26    806 	ADD	A,(IY+IND)
+06e8  87              27    807 	ADD	A,A
+06e9  80              28    808 	ADD	A,B
+06ea  81              29    809 	ADD	A,C
+06eb  82              30    810 	ADD	A,D
+06ec  83              31    811 	ADD	A,E
+06ed  84              32    812 	ADD	A,H
+06ee  85              33    813 	ADD	A,L
+06ef  c6 20           34    814 	ADD	A,N
+06f1  09              35    815 	ADD	HL,BC
+06f2  19              36    816 	ADD	HL,DE
+06f3  29              37    817 	ADD	HL,HL
+06f4  39              38    818 	ADD	HL,SP
+06f5  dd 09           39    819 	ADD	IX,BC
+06f7  dd 19           40    820 	ADD	IX,DE
+06f9  dd 29           41    821 	ADD	IX,IX
+06fb  dd 39           42    822 	ADD	IX,SP
+06fd  fd 09           43    823 	ADD	IY,BC
+06ff  fd 19           44    824 	ADD	IY,DE
+0701  fd 29           45    825 	ADD	IY,IY
+0703  fd 39           46    826 	ADD	IY,SP
+0705  a6              47    827 	AND	(HL)
+0706  dd a6 05        48    828 	AND	(IX+IND)
+0709  fd a6 05        49    829 	AND	(IY+IND)
+070c  a7              50    830 	AND	A
+070d  a0              51    831 	AND	B
+070e  a1              52    832 	AND	C
+070f  a2              53    833 	AND	D
+0710  a3              54    834 	AND	E
+0711  a4              55    835 	AND	H
+0712  a5              56    836 	AND	L
+0713  e6 20           57    837 	AND	N
+0715  cb 46           58    838 	BIT	0,(HL)
+0717  dd cb 05 46     59    839 	BIT	0,(IX+IND)
+071b  fd cb 05 46     60    840 	BIT	0,(IY+IND)
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 17
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+071f  cb 47           61    841 	BIT	0,A
+0721  cb 40           62    842 	BIT	0,B
+0723  cb 41           63    843 	BIT	0,C
+0725  cb 42           64    844 	BIT	0,D
+0727  cb 43           65    845 	BIT	0,E
+0729  cb 44           66    846 	BIT	0,H
+072b  cb 45           67    847 	BIT	0,L
+072d  cb 4e           68    848 	BIT	1,(HL)
+072f  dd cb 05 4e     69    849 	BIT	1,(IX+IND)
+0733  fd cb 05 4e     70    850 	BIT	1,(IY+IND)
+0737  cb 4f           71    851 	BIT	1,A
+0739  cb 48           72    852 	BIT	1,B
+073b  cb 49           73    853 	BIT	1,C
+073d  cb 4a           74    854 	BIT	1,D
+073f  cb 4b           75    855 	BIT	1,E
+0741  cb 4c           76    856 	BIT	1,H
+0743  cb 4d           77    857 	BIT	1,L
+0745  cb 56           78    858 	BIT	2,(HL)
+0747  dd cb 05 56     79    859 	BIT	2,(IX+IND)
+074b  fd cb 05 56     80    860 	BIT	2,(IY+IND)
+074f  cb 57           81    861 	BIT	2,A
+0751  cb 50           82    862 	BIT	2,B
+0753  cb 51           83    863 	BIT	2,C
+0755  cb 52           84    864 	BIT	2,D
+0757  cb 53           85    865 	BIT	2,E
+0759  cb 54           86    866 	BIT	2,H
+075b  cb 55           87    867 	BIT	2,L
+075d  cb 5e           88    868 	BIT	3,(HL)
+075f  dd cb 05 5e     89    869 	BIT	3,(IX+IND)
+0763  fd cb 05 5e     90    870 	BIT	3,(IY+IND)
+0767  cb 5f           91    871 	BIT	3,A
+0769  cb 58           92    872 	BIT	3,B
+076b  cb 59           93    873 	BIT	3,C
+076d  cb 5a           94    874 	BIT	3,D
+076f  cb 5b           95    875 	BIT	3,E
+0771  cb 5c           96    876 	BIT	3,H
+0773  cb 5d           97    877 	BIT	3,L
+0775  cb 66           98    878 	BIT	4,(HL)
+0777  dd cb 05 66     99    879 	BIT	4,(IX+IND)
+077b  fd cb 05 66    100    880 	BIT	4,(IY+IND)
+077f  cb 67          101    881 	BIT	4,A
+0781  cb 60          102    882 	BIT	4,B
+0783  cb 61          103    883 	BIT	4,C
+0785  cb 62          104    884 	BIT	4,D
+0787  cb 63          105    885 	BIT	4,E
+0789  cb 64          106    886 	BIT	4,H
+078b  cb 65          107    887 	BIT	4,L
+078d  cb 6e          108    888 	BIT	5,(HL)
+078f  dd cb 05 6e    109    889 	BIT	5,(IX+IND)
+0793  fd cb 05 6e    110    890 	BIT	5,(IY+IND)
+0797  cb 6f          111    891 	BIT	5,A
+0799  cb 68          112    892 	BIT	5,B
+079b  cb 69          113    893 	BIT	5,C
+079d  cb 6a          114    894 	BIT	5,D
+079f  cb 6b          115    895 	BIT	5,E
+07a1  cb 6c          116    896 	BIT	5,H
+07a3  cb 6d          117    897 	BIT	5,L
+07a5  cb 76          118    898 	BIT	6,(HL)
+07a7  dd cb 05 76    119    899 	BIT	6,(IX+IND)
+07ab  fd cb 05 76    120    900 	BIT	6,(IY+IND)
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 18
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+07af  cb 77          121    901 	BIT	6,A
+07b1  cb 70          122    902 	BIT	6,B
+07b3  cb 71          123    903 	BIT	6,C
+07b5  cb 72          124    904 	BIT	6,D
+07b7  cb 73          125    905 	BIT	6,E
+07b9  cb 74          126    906 	BIT	6,H
+07bb  cb 75          127    907 	BIT	6,L
+07bd  cb 7e          128    908 	BIT	7,(HL)
+07bf  dd cb 05 7e    129    909 	BIT	7,(IX+IND)
+07c3  fd cb 05 7e    130    910 	BIT	7,(IY+IND)
+07c7  cb 7f          131    911 	BIT	7,A
+07c9  cb 78          132    912 	BIT	7,B
+07cb  cb 79          133    913 	BIT	7,C
+07cd  cb 7a          134    914 	BIT	7,D
+07cf  cb 7b          135    915 	BIT	7,E
+07d1  cb 7c          136    916 	BIT	7,H
+07d3  cb 7d          137    917 	BIT	7,L
+07d5  dc 4d 0c       138    918 	CALL	C,NN
+07d8  fc 4d 0c       139    919 	CALL	M,NN
+07db  d4 4d 0c       140    920 	CALL	NC,NN
+07de  cd 4d 0c       141    921 	CALL	NN
+07e1  c4 4d 0c       142    922 	CALL	NZ,NN
+07e4  f4 4d 0c       143    923 	CALL	P,NN
+07e7  ec 4d 0c       144    924 	CALL	PE,NN
+07ea  e4 4d 0c       145    925 	CALL	PO,NN
+07ed  cc 4d 0c       146    926 	CALL	Z,NN
+07f0  3f             147    927 	CCF
+07f1  be             148    928 	CP	(HL)
+07f2  dd be 05       149    929 	CP	(IX+IND)
+07f5  fd be 05       150    930 	CP	(IY+IND)
+07f8  bf             151    931 	CP	A
+07f9  b8             152    932 	CP	B
+07fa  b9             153    933 	CP	C
+07fb  ba             154    934 	CP	D
+07fc  bb             155    935 	CP	E
+07fd  bc             156    936 	CP	H
+07fe  bd             157    937 	CP	L
+07ff  fe 20          158    938 	CP	N
+0801  ed a9          159    939 	CPD
+0803  ed b9          160    940 	CPDR
+0805  ed a1          161    941 	CPI
+0807  ed b1          162    942 	CPIR
+0809  2f             163    943 	CPL
+080a  27             164    944 	DAA
+080b  35             165    945 	DEC	(HL)
+080c  dd 35 05       166    946 	DEC	(IX+IND)
+080f  fd 35 05       167    947 	DEC	(IY+IND)
+0812  3d             168    948 	DEC	A
+0813  05             169    949 	DEC	B
+0814  0b             170    950 	DEC	BC
+0815  0d             171    951 	DEC	C
+0816  15             172    952 	DEC	D
+0817  1b             173    953 	DEC	DE
+0818  1d             174    954 	DEC	E
+0819  25             175    955 	DEC	H
+081a  2b             176    956 	DEC	HL
+081b  dd 2b          177    957 	DEC	IX
+081d  fd 2b          178    958 	DEC	IY
+081f  2d             179    959 	DEC	L
+0820  3b             180    960 	DEC	SP
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 19
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0821  f3             181    961 	DI
+0822  10 2e          182    962 	DJNZ	$+DIS
+0824  fb             183    963 	EI
+0825  e3             184    964 	EX	(SP),HL
+0826  dd e3          185    965 	EX	(SP),IX
+0828  fd e3          186    966 	EX	(SP),IY
+082a  08             187    967 	EX	AF,AF'
+082b  eb             188    968 	EX	DE,HL
+082c  d9             189    969 	EXX
+082d  76             190    970 	HALT
+082e  ed 46          191    971 	IM	0
+0830  ed 56          192    972 	IM	1
+0832  ed 5e          193    973 	IM	2
+0834  ed 78          194    974 	IN	A,(C)
+0836  db 20          195    975 	IN	A,(N)
+0838  ed 40          196    976 	IN	B,(C)
+083a  ed 48          197    977 	IN	C,(C)
+083c  ed 50          198    978 	IN	D,(C)
+083e  ed 58          199    979 	IN	E,(C)
+0840  ed 60          200    980 	IN	H,(C)
+0842  ed 68          201    981 	IN	L,(C)
+0844  34             202    982 	INC	(HL)
+0845  dd 34 05       203    983 	INC	(IX+IND)
+0848  fd 34 05       204    984 	INC	(IY+IND)
+084b  3c             205    985 	INC	A
+084c  04             206    986 	INC	B
+084d  03             207    987 	INC	BC
+084e  0c             208    988 	INC	C
+084f  14             209    989 	INC	D
+0850  13             210    990 	INC	DE
+0851  1c             211    991 	INC	E
+0852  24             212    992 	INC	H
+0853  23             213    993 	INC	HL
+0854  dd 23          214    994 	INC	IX
+0856  fd 23          215    995 	INC	IY
+0858  2c             216    996 	INC	L
+0859  33             217    997 	INC	SP
+085a  ed aa          218    998 	IND
+085c  ed ba          219    999 	INDR
+085e  ed a2          220   1000 	INI
+0860  ed b2          221   1001 	INIR
+0862  e9             222   1002 	JP	(HL)
+0863  dd e9          223   1003 	JP	(IX)
+0865  fd e9          224   1004 	JP	(IY)
+0867  da 4d 0c       225   1005 	JP	C,NN
+086a  fa 4d 0c       226   1006 	JP	M,NN
+086d  d2 4d 0c       227   1007 	JP	NC,NN
+0870  c3 4d 0c       228   1008 	JP	NN
+0873  c2 4d 0c       229   1009 	JP	NZ,NN
+0876  f2 4d 0c       230   1010 	JP	P,NN
+0879  ea 4d 0c       231   1011 	JP	PE,NN
+087c  e2 4d 0c       232   1012 	JP	PO,NN
+087f  ca 4d 0c       233   1013 	JP	Z,NN
+0882  38 2e          234   1014 	JR	C,$+DIS
+0884  18 2e          235   1015 	JR	$+DIS
+0886  30 2e          236   1016 	JR	NC,$+DIS
+0888  20 2e          237   1017 	JR	NZ,$+DIS
+088a  28 2e          238   1018 	JR	Z,$+DIS
+088c  02             239   1019 	LD	(BC),A
+088d  12             240   1020 	LD	(DE),A
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 20
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+088e  77             241   1021 	LD	(HL),A
+088f  70             242   1022 	LD	(HL),B
+0890  71             243   1023 	LD	(HL),C
+0891  72             244   1024 	LD	(HL),D
+0892  73             245   1025 	LD	(HL),E
+0893  74             246   1026 	LD	(HL),H
+0894  75             247   1027 	LD	(HL),L
+0895  36 20          248   1028 	LD	(HL),N
+0897  dd 77 05       249   1029 	LD	(IX+IND),A
+089a  dd 70 05       250   1030 	LD	(IX+IND),B
+089d  dd 71 05       251   1031 	LD	(IX+IND),C
+08a0  dd 72 05       252   1032 	LD	(IX+IND),D
+08a3  dd 73 05       253   1033 	LD	(IX+IND),E
+08a6  dd 74 05       254   1034 	LD	(IX+IND),H
+08a9  dd 75 05       255   1035 	LD	(IX+IND),L
+08ac  dd 36 05 20    256   1036 	LD	(IX+IND),N
+08b0  fd 77 05       257   1037 	LD	(IY+IND),A
+08b3  fd 70 05       258   1038 	LD	(IY+IND),B
+08b6  fd 71 05       259   1039 	LD	(IY+IND),C
+08b9  fd 72 05       260   1040 	LD	(IY+IND),D
+08bc  fd 73 05       261   1041 	LD	(IY+IND),E
+08bf  fd 74 05       262   1042 	LD	(IY+IND),H
+08c2  fd 75 05       263   1043 	LD	(IY+IND),L
+08c5  fd 36 05 20    264   1044 	LD	(IY+IND),N
+08c9  32 4d 0c       265   1045 	LD	(NN),A
+08cc  ed 43 4d 0c    266   1046 	LD	(NN),BC
+08d0  ed 53 4d 0c    267   1047 	LD	(NN),DE
+08d4  22 4d 0c       268   1048 	LD	(NN),HL
+08d7  dd 22 4d 0c    269   1049 	LD	(NN),IX
+08db  fd 22 4d 0c    270   1050 	LD	(NN),IY
+08df  ed 73 4d 0c    271   1051 	LD	(NN),SP
+08e3  0a             272   1052 	LD	A,(BC)
+08e4  1a             273   1053 	LD	A,(DE)
+08e5  7e             274   1054 	LD	A,(HL)
+08e6  dd 7e 05       275   1055 	LD	A,(IX+IND)
+08e9  fd 7e 05       276   1056 	LD	A,(IY+IND)
+08ec  3a 4d 0c       277   1057 	LD	A,(NN)
+08ef  7f             278   1058 	LD	A,A
+08f0  78             279   1059 	LD	A,B
+08f1  79             280   1060 	LD	A,C
+08f2  7a             281   1061 	LD	A,D
+08f3  7b             282   1062 	LD	A,E
+08f4  7c             283   1063 	LD	A,H
+08f5  ed 57          284   1064 	LD	A,I
+08f7  7d             285   1065 	LD	A,L
+08f8  3e 20          286   1066 	LD	A,N
+08fa  46             287   1067 	LD	B,(HL)
+08fb  dd 46 05       288   1068 	LD	B,(IX+IND)
+08fe  fd 46 05       289   1069 	LD	B,(IY+IND)
+0901  47             290   1070 	LD	B,A
+0902  40             291   1071 	LD	B,B
+0903  41             292   1072 	LD	B,C
+0904  42             293   1073 	LD	B,D
+0905  43             294   1074 	LD	B,E
+0906  44             295   1075 	LD	B,H
+0907  45             296   1076 	LD	B,L
+0908  06 20          297   1077 	LD	B,N
+090a  ed 4b 4d 0c    298   1078 	LD	BC,(NN)
+090e  01 4d 0c       299   1079 	LD	BC,NN
+0911  4e             300   1080 	LD	C,(HL)
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 21
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0912  dd 4e 05       301   1081 	LD	C,(IX+IND)
+0915  fd 4e 05       302   1082 	LD	C,(IY+IND)
+0918  4f             303   1083 	LD	C,A
+0919  48             304   1084 	LD	C,B
+091a  49             305   1085 	LD	C,C
+091b  4a             306   1086 	LD	C,D
+091c  4b             307   1087 	LD	C,E
+091d  4c             308   1088 	LD	C,H
+091e  4d             309   1089 	LD	C,L
+091f  0e 20          310   1090 	LD	C,N
+0921  56             311   1091 	LD	D,(HL)
+0922  dd 56 05       312   1092 	LD	D,(IX+IND)
+0925  fd 56 05       313   1093 	LD	D,(IY+IND)
+0928  57             314   1094 	LD	D,A
+0929  50             315   1095 	LD	D,B
+092a  51             316   1096 	LD	D,C
+092b  52             317   1097 	LD	D,D
+092c  53             318   1098 	LD	D,E
+092d  54             319   1099 	LD	D,H
+092e  55             320   1100 	LD	D,L
+092f  16 20          321   1101 	LD	D,N
+0931  ed 5b 4d 0c    322   1102 	LD	DE,(NN)
+0935  11 4d 0c       323   1103 	LD	DE,NN
+0938  5e             324   1104 	LD	E,(HL)
+0939  dd 5e 05       325   1105 	LD	E,(IX+IND)
+093c  fd 5e 05       326   1106 	LD	E,(IY+IND)
+093f  5f             327   1107 	LD	E,A
+0940  58             328   1108 	LD	E,B
+0941  59             329   1109 	LD	E,C
+0942  5a             330   1110 	LD	E,D
+0943  5b             331   1111 	LD	E,E
+0944  5c             332   1112 	LD	E,H
+0945  5d             333   1113 	LD	E,L
+0946  1e 20          334   1114 	LD	E,N
+0948  66             335   1115 	LD	H,(HL)
+0949  dd 66 05       336   1116 	LD	H,(IX+IND)
+094c  fd 66 05       337   1117 	LD	H,(IY+IND)
+094f  67             338   1118 	LD	H,A
+0950  60             339   1119 	LD	H,B
+0951  61             340   1120 	LD	H,C
+0952  62             341   1121 	LD	H,D
+0953  63             342   1122 	LD	H,E
+0954  64             343   1123 	LD	H,H
+0955  65             344   1124 	LD	H,L
+0956  26 20          345   1125 	LD	H,N
+0958  2a 4d 0c       346   1126 	LD	HL,(NN)
+095b  21 4d 0c       347   1127 	LD	HL,NN
+095e  ed 47          348   1128 	LD	I,A
+0960  dd 2a 4d 0c    349   1129 	LD	IX,(NN)
+0964  dd 21 4d 0c    350   1130 	LD	IX,NN
+0968  fd 2a 4d 0c    351   1131 	LD	IY,(NN)
+096c  fd 21 4d 0c    352   1132 	LD	IY,NN
+0970  6e             353   1133 	LD	L,(HL)
+0971  dd 6e 05       354   1134 	LD	L,(IX+IND)
+0974  fd 6e 05       355   1135 	LD	L,(IY+IND)
+0977  6f             356   1136 	LD	L,A
+0978  68             357   1137 	LD	L,B
+0979  69             358   1138 	LD	L,C
+097a  6a             359   1139 	LD	L,D
+097b  6b             360   1140 	LD	L,E
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 22
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+097c  6c             361   1141 	LD	L,H
+097d  6d             362   1142 	LD	L,L
+097e  2e 20          363   1143 	LD	L,N
+0980  ed 7b 4d 0c    364   1144 	LD	SP,(NN)
+0984  f9             365   1145 	LD	SP,HL
+0985  dd f9          366   1146 	LD	SP,IX
+0987  fd f9          367   1147 	LD	SP,IY
+0989  31 4d 0c       368   1148 	LD	SP,NN
+098c  ed a8          369   1149 	LDD
+098e  ed b8          370   1150 	LDDR
+0990  ed a0          371   1151 	LDI
+0992  ed b0          372   1152 	LDIR
+0994  ed 44          373   1153 	NEG
+0996  00             374   1154 	NOP
+0997  b6             375   1155 	OR	(HL)
+0998  dd b6 05       376   1156 	OR	(IX+IND)
+099b  fd b6 05       377   1157 	OR	(IY+IND)
+099e  b7             378   1158 	OR	A
+099f  b0             379   1159 	OR	B
+09a0  b1             380   1160 	OR	C
+09a1  b2             381   1161 	OR	D
+09a2  b3             382   1162 	OR	E
+09a3  b4             383   1163 	OR	H
+09a4  b5             384   1164 	OR	L
+09a5  f6 20          385   1165 	OR	N
+09a7  ed bb          386   1166 	OTDR
+09a9  ed b3          387   1167 	OTIR
+09ab  ed 79          388   1168 	OUT	(C),A
+09ad  ed 41          389   1169 	OUT	(C),B
+09af  ed 49          390   1170 	OUT	(C),C
+09b1  ed 51          391   1171 	OUT	(C),D
+09b3  ed 59          392   1172 	OUT	(C),E
+09b5  ed 61          393   1173 	OUT	(C),H
+09b7  ed 69          394   1174 	OUT	(C),L
+09b9  d3 20          395   1175 	OUT	(N),A
+09bb  ed ab          396   1176 	OUTD
+09bd  ed a3          397   1177 	OUTI
+09bf  f1             398   1178 	POP	AF
+09c0  c1             399   1179 	POP	BC
+09c1  d1             400   1180 	POP	DE
+09c2  e1             401   1181 	POP	HL
+09c3  dd e1          402   1182 	POP	IX
+09c5  fd e1          403   1183 	POP	IY
+09c7  f5             404   1184 	PUSH	AF
+09c8  c5             405   1185 	PUSH	BC
+09c9  d5             406   1186 	PUSH	DE
+09ca  e5             407   1187 	PUSH	HL
+09cb  dd e5          408   1188 	PUSH	IX
+09cd  fd e5          409   1189 	PUSH	IY
+09cf  cb 86          410   1190 	RES	0,(HL)
+09d1  dd cb 05 86    411   1191 	RES	0,(IX+IND)
+09d5  fd cb 05 86    412   1192 	RES	0,(IY+IND)
+09d9  cb 87          413   1193 	RES	0,A
+09db  cb 80          414   1194 	RES	0,B
+09dd  cb 81          415   1195 	RES	0,C
+09df  cb 82          416   1196 	RES	0,D
+09e1  cb 83          417   1197 	RES	0,E
+09e3  cb 84          418   1198 	RES	0,H
+09e5  cb 85          419   1199 	RES	0,L
+09e7  cb 8e          420   1200 	RES	1,(HL)
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 23
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+09e9  dd cb 05 8e    421   1201 	RES	1,(IX+IND)
+09ed  fd cb 05 8e    422   1202 	RES	1,(IY+IND)
+09f1  cb 8f          423   1203 	RES	1,A
+09f3  cb 88          424   1204 	RES	1,B
+09f5  cb 89          425   1205 	RES	1,C
+09f7  cb 8a          426   1206 	RES	1,D
+09f9  cb 8b          427   1207 	RES	1,E
+09fb  cb 8c          428   1208 	RES	1,H
+09fd  cb 8d          429   1209 	RES	1,L
+09ff  cb 96          430   1210 	RES	2,(HL)
+0a01  dd cb 05 96    431   1211 	RES	2,(IX+IND)
+0a05  fd cb 05 96    432   1212 	RES	2,(IY+IND)
+0a09  cb 97          433   1213 	RES	2,A
+0a0b  cb 90          434   1214 	RES	2,B
+0a0d  cb 91          435   1215 	RES	2,C
+0a0f  cb 92          436   1216 	RES	2,D
+0a11  cb 93          437   1217 	RES	2,E
+0a13  cb 94          438   1218 	RES	2,H
+0a15  cb 95          439   1219 	RES	2,L
+0a17  cb 9e          440   1220 	RES	3,(HL)
+0a19  dd cb 05 9e    441   1221 	RES	3,(IX+IND)
+0a1d  fd cb 05 9e    442   1222 	RES	3,(IY+IND)
+0a21  cb 9f          443   1223 	RES	3,A
+0a23  cb 98          444   1224 	RES	3,B
+0a25  cb 99          445   1225 	RES	3,C
+0a27  cb 9a          446   1226 	RES	3,D
+0a29  cb 9b          447   1227 	RES	3,E
+0a2b  cb 9c          448   1228 	RES	3,H
+0a2d  cb 9d          449   1229 	RES	3,L
+0a2f  cb a6          450   1230 	RES	4,(HL)
+0a31  dd cb 05 a6    451   1231 	RES	4,(IX+IND)
+0a35  fd cb 05 a6    452   1232 	RES	4,(IY+IND)
+0a39  cb a7          453   1233 	RES	4,A
+0a3b  cb a0          454   1234 	RES	4,B
+0a3d  cb a1          455   1235 	RES	4,C
+0a3f  cb a2          456   1236 	RES	4,D
+0a41  cb a3          457   1237 	RES	4,E
+0a43  cb a4          458   1238 	RES	4,H
+0a45  cb a5          459   1239 	RES	4,L
+0a47  cb ae          460   1240 	RES	5,(HL)
+0a49  dd cb 05 ae    461   1241 	RES	5,(IX+IND)
+0a4d  fd cb 05 ae    462   1242 	RES	5,(IY+IND)
+0a51  cb af          463   1243 	RES	5,A
+0a53  cb a8          464   1244 	RES	5,B
+0a55  cb a9          465   1245 	RES	5,C
+0a57  cb aa          466   1246 	RES	5,D
+0a59  cb ab          467   1247 	RES	5,E
+0a5b  cb ac          468   1248 	RES	5,H
+0a5d  cb ad          469   1249 	RES	5,L
+0a5f  cb b6          470   1250 	RES	6,(HL)
+0a61  dd cb 05 b6    471   1251 	RES	6,(IX+IND)
+0a65  fd cb 05 b6    472   1252 	RES	6,(IY+IND)
+0a69  cb b7          473   1253 	RES	6,A
+0a6b  cb b0          474   1254 	RES	6,B
+0a6d  cb b1          475   1255 	RES	6,C
+0a6f  cb b2          476   1256 	RES	6,D
+0a71  cb b3          477   1257 	RES	6,E
+0a73  cb b4          478   1258 	RES	6,H
+0a75  cb b5          479   1259 	RES	6,L
+0a77  cb be          480   1260 	RES	7,(HL)
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 24
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0a79  dd cb 05 be    481   1261 	RES	7,(IX+IND)
+0a7d  fd cb 05 be    482   1262 	RES	7,(IY+IND)
+0a81  cb bf          483   1263 	RES	7,A
+0a83  cb b8          484   1264 	RES	7,B
+0a85  cb b9          485   1265 	RES	7,C
+0a87  cb ba          486   1266 	RES	7,D
+0a89  cb bb          487   1267 	RES	7,E
+0a8b  cb bc          488   1268 	RES	7,H
+0a8d  cb bd          489   1269 	RES	7,L
+0a8f  c9             490   1270 	RET
+0a90  d8             491   1271 	RET	C
+0a91  f8             492   1272 	RET	M
+0a92  d0             493   1273 	RET	NC
+0a93  c0             494   1274 	RET	NZ
+0a94  f0             495   1275 	RET	P
+0a95  e8             496   1276 	RET	PE
+0a96  e0             497   1277 	RET	PO
+0a97  c8             498   1278 	RET	Z
+0a98  ed 4d          499   1279 	RETI
+0a9a  ed 45          500   1280 	RETN
+0a9c  cb 16          501   1281 	RL	(HL)
+0a9e  dd cb 05 16    502   1282 	RL	(IX+IND)
+0aa2  fd cb 05 16    503   1283 	RL	(IY+IND)
+0aa6  cb 17          504   1284 	RL	A
+0aa8  cb 10          505   1285 	RL	B
+0aaa  cb 11          506   1286 	RL	C
+0aac  cb 12          507   1287 	RL	D
+0aae  cb 13          508   1288 	RL	E
+0ab0  cb 14          509   1289 	RL	H
+0ab2  cb 15          510   1290 	RL	L
+0ab4  17             511   1291 	RLA
+0ab5  cb 06          512   1292 	RLC	(HL)
+0ab7  dd cb 05 06    513   1293 	RLC	(IX+IND)
+0abb  fd cb 05 06    514   1294 	RLC	(IY+IND)
+0abf  cb 07          515   1295 	RLC	A
+0ac1  cb 00          516   1296 	RLC	B
+0ac3  cb 01          517   1297 	RLC	C
+0ac5  cb 02          518   1298 	RLC	D
+0ac7  cb 03          519   1299 	RLC	E
+0ac9  cb 04          520   1300 	RLC	H
+0acb  cb 05          521   1301 	RLC	L
+0acd  07             522   1302 	RLCA
+0ace  ed 6f          523   1303 	RLD
+0ad0  cb 1e          524   1304 	RR	(HL)
+0ad2  dd cb 05 1e    525   1305 	RR	(IX+IND)
+0ad6  fd cb 05 1e    526   1306 	RR	(IY+IND)
+0ada  cb 1f          527   1307 	RR	A
+0adc  cb 18          528   1308 	RR	B
+0ade  cb 19          529   1309 	RR	C
+0ae0  cb 1a          530   1310 	RR	D
+0ae2  cb 1b          531   1311 	RR	E
+0ae4  cb 1c          532   1312 	RR	H
+0ae6  cb 1d          533   1313 	RR	L
+0ae8  1f             534   1314 	RRA
+0ae9  cb 0e          535   1315 	RRC	(HL)
+0aeb  dd cb 05 0e    536   1316 	RRC	(IX+IND)
+0aef  fd cb 05 0e    537   1317 	RRC	(IY+IND)
+0af3  cb 0f          538   1318 	RRC	A
+0af5  cb 08          539   1319 	RRC	B
+0af7  cb 09          540   1320 	RRC	C
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 25
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0af9  cb 0a          541   1321 	RRC	D
+0afb  cb 0b          542   1322 	RRC	E
+0afd  cb 0c          543   1323 	RRC	H
+0aff  cb 0d          544   1324 	RRC	L
+0b01  0f             545   1325 	RRCA
+0b02  ed 67          546   1326 	RRD
+0b04  c7             547   1327 	RST	0
+0b05  d7             548   1328 	RST	10H
+0b06  df             549   1329 	RST	18H
+0b07  e7             550   1330 	RST	20H
+0b08  ef             551   1331 	RST	28H
+0b09  f7             552   1332 	RST	30H
+0b0a  ff             553   1333 	RST	38H
+0b0b  cf             554   1334 	RST	8
+0b0c  9e             555   1335 	SBC	A,(HL)
+0b0d  dd 9e 05       556   1336 	SBC	A,(IX+IND)
+0b10  fd 9e 05       557   1337 	SBC	A,(IY+IND)
+0b13  9f             558   1338 	SBC	A,A
+0b14  98             559   1339 	SBC	A,B
+0b15  99             560   1340 	SBC	A,C
+0b16  9a             561   1341 	SBC	A,D
+0b17  9b             562   1342 	SBC	A,E
+0b18  9c             563   1343 	SBC	A,H
+0b19  9d             564   1344 	SBC	A,L
+0b1a  de 20          565   1345 	SBC	A,N
+0b1c  ed 42          566   1346 	SBC	HL,BC
+0b1e  ed 52          567   1347 	SBC	HL,DE
+0b20  ed 62          568   1348 	SBC	HL,HL
+0b22  ed 72          569   1349 	SBC	HL,SP
+0b24  37             570   1350 	SCF
+0b25  cb c6          571   1351 	SET	0,(HL)
+0b27  dd cb 05 c6    572   1352 	SET	0,(IX+IND)
+0b2b  fd cb 05 c6    573   1353 	SET	0,(IY+IND)
+0b2f  cb c7          574   1354 	SET	0,A
+0b31  cb c0          575   1355 	SET	0,B
+0b33  cb c1          576   1356 	SET	0,C
+0b35  cb c2          577   1357 	SET	0,D
+0b37  cb c3          578   1358 	SET	0,E
+0b39  cb c4          579   1359 	SET	0,H
+0b3b  cb c5          580   1360 	SET	0,L
+0b3d  cb ce          581   1361 	SET	1,(HL)
+0b3f  dd cb 05 ce    582   1362 	SET	1,(IX+IND)
+0b43  fd cb 05 ce    583   1363 	SET	1,(IY+IND)
+0b47  cb cf          584   1364 	SET	1,A
+0b49  cb c8          585   1365 	SET	1,B
+0b4b  cb c9          586   1366 	SET	1,C
+0b4d  cb ca          587   1367 	SET	1,D
+0b4f  cb cb          588   1368 	SET	1,E
+0b51  cb cc          589   1369 	SET	1,H
+0b53  cb cd          590   1370 	SET	1,L
+0b55  cb d6          591   1371 	SET	2,(HL)
+0b57  dd cb 05 d6    592   1372 	SET	2,(IX+IND)
+0b5b  fd cb 05 d6    593   1373 	SET	2,(IY+IND)
+0b5f  cb d7          594   1374 	SET	2,A
+0b61  cb d0          595   1375 	SET	2,B
+0b63  cb d1          596   1376 	SET	2,C
+0b65  cb d2          597   1377 	SET	2,D
+0b67  cb d3          598   1378 	SET	2,E
+0b69  cb d4          599   1379 	SET	2,H
+0b6b  cb d5          600   1380 	SET	2,L
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 26
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0b6d  cb de          601   1381 	SET	3,(HL)
+0b6f  dd cb 05 de    602   1382 	SET	3,(IX+IND)
+0b73  fd cb 05 de    603   1383 	SET	3,(IY+IND)
+0b77  cb df          604   1384 	SET	3,A
+0b79  cb d8          605   1385 	SET	3,B
+0b7b  cb d9          606   1386 	SET	3,C
+0b7d  cb da          607   1387 	SET	3,D
+0b7f  cb db          608   1388 	SET	3,E
+0b81  cb dc          609   1389 	SET	3,H
+0b83  cb dd          610   1390 	SET	3,L
+0b85  cb e6          611   1391 	SET	4,(HL)
+0b87  dd cb 05 e6    612   1392 	SET	4,(IX+IND)
+0b8b  fd cb 05 e6    613   1393 	SET	4,(IY+IND)
+0b8f  cb e7          614   1394 	SET	4,A
+0b91  cb e0          615   1395 	SET	4,B
+0b93  cb e1          616   1396 	SET	4,C
+0b95  cb e2          617   1397 	SET	4,D
+0b97  cb e3          618   1398 	SET	4,E
+0b99  cb e4          619   1399 	SET	4,H
+0b9b  cb e5          620   1400 	SET	4,L
+0b9d  cb ee          621   1401 	SET	5,(HL)
+0b9f  dd cb 05 ee    622   1402 	SET	5,(IX+IND)
+0ba3  fd cb 05 ee    623   1403 	SET	5,(IY+IND)
+0ba7  cb ef          624   1404 	SET	5,A
+0ba9  cb e8          625   1405 	SET	5,B
+0bab  cb e9          626   1406 	SET	5,C
+0bad  cb ea          627   1407 	SET	5,D
+0baf  cb eb          628   1408 	SET	5,E
+0bb1  cb ec          629   1409 	SET	5,H
+0bb3  cb ed          630   1410 	SET	5,L
+0bb5  cb f6          631   1411 	SET	6,(HL)
+0bb7  dd cb 05 f6    632   1412 	SET	6,(IX+IND)
+0bbb  fd cb 05 f6    633   1413 	SET	6,(IY+IND)
+0bbf  cb f7          634   1414 	SET	6,A
+0bc1  cb f0          635   1415 	SET	6,B
+0bc3  cb f1          636   1416 	SET	6,C
+0bc5  cb f2          637   1417 	SET	6,D
+0bc7  cb f3          638   1418 	SET	6,E
+0bc9  cb f4          639   1419 	SET	6,H
+0bcb  cb f5          640   1420 	SET	6,L
+0bcd  cb fe          641   1421 	SET	7,(HL)
+0bcf  dd cb 05 fe    642   1422 	SET	7,(IX+IND)
+0bd3  fd cb 05 fe    643   1423 	SET	7,(IY+IND)
+0bd7  cb ff          644   1424 	SET	7,A
+0bd9  cb f8          645   1425 	SET	7,B
+0bdb  cb f9          646   1426 	SET	7,C
+0bdd  cb fa          647   1427 	SET	7,D
+0bdf  cb fb          648   1428 	SET	7,E
+0be1  cb fc          649   1429 	SET	7,H
+0be3  cb fd          650   1430 	SET	7,L
+0be5  cb 26          651   1431 	SLA	(HL)
+0be7  dd cb 05 26    652   1432 	SLA	(IX+IND)
+0beb  fd cb 05 26    653   1433 	SLA	(IY+IND)
+0bef  cb 27          654   1434 	SLA	A
+0bf1  cb 20          655   1435 	SLA	B
+0bf3  cb 21          656   1436 	SLA	C
+0bf5  cb 22          657   1437 	SLA	D
+0bf7  cb 23          658   1438 	SLA	E
+0bf9  cb 24          659   1439 	SLA	H
+0bfb  cb 25          660   1440 	SLA	L
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 27
+Source file: z80ops.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+0bfd  cb 2e          661   1441 	SRA	(HL)
+0bff  dd cb 05 2e    662   1442 	SRA	(IX+IND)
+0c03  fd cb 05 2e    663   1443 	SRA	(IY+IND)
+0c07  cb 2f          664   1444 	SRA	A
+0c09  cb 28          665   1445 	SRA	B
+0c0b  cb 29          666   1446 	SRA	C
+0c0d  cb 2a          667   1447 	SRA	D
+0c0f  cb 2b          668   1448 	SRA	E
+0c11  cb 2c          669   1449 	SRA	H
+0c13  cb 2d          670   1450 	SRA	L
+0c15  cb 3e          671   1451 	SRL	(HL)
+0c17  dd cb 05 3e    672   1452 	SRL	(IX+IND)
+0c1b  fd cb 05 3e    673   1453 	SRL	(IY+IND)
+0c1f  cb 3f          674   1454 	SRL	A
+0c21  cb 38          675   1455 	SRL	B
+0c23  cb 39          676   1456 	SRL	C
+0c25  cb 3a          677   1457 	SRL	D
+0c27  cb 3b          678   1458 	SRL	E
+0c29  cb 3c          679   1459 	SRL	H
+0c2b  cb 3d          680   1460 	SRL	L
+0c2d  96             681   1461 	SUB	(HL)
+0c2e  dd 96 05       682   1462 	SUB	(IX+IND)
+0c31  fd 96 05       683   1463 	SUB	(IY+IND)
+0c34  97             684   1464 	SUB	A
+0c35  90             685   1465 	SUB	B
+0c36  91             686   1466 	SUB	C
+0c37  92             687   1467 	SUB	D
+0c38  93             688   1468 	SUB	E
+0c39  94             689   1469 	SUB	H
+0c3a  95             690   1470 	SUB	L
+0c3b  d6 20          691   1471 	SUB	N
+0c3d  ae             692   1472 	XOR	(HL)
+0c3e  dd ae 05       693   1473 	XOR	(IX+IND)
+0c41  fd ae 05       694   1474 	XOR	(IY+IND)
+0c44  af             695   1475 	XOR	A
+0c45  a8             696   1476 	XOR	B
+0c46  a9             697   1477 	XOR	C
+0c47  aa             698   1478 	XOR	D
+0c48  ab             699   1479 	XOR	E
+0c49  ac             700   1480 	XOR	H
+0c4a  ad             701   1481 	XOR	L
+0c4b  ee 20          702   1482 	XOR	N
+                     703   1483 
+0c4d                 704   1484 NN:	DEFS	2
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 28
+Source file: z80main.asm
+Title:       Z80 Instruction Set in alphabetical order
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                      25   1485 
+0c4f                  26   1486 	DEFS	100H
+                      27   1487 STACK:
+0d4f                  28   1488 	END
+Z80-Assembler	Release 1.9	Sun Jul  3 16:25:44 2022	Page 29
+Source file: z80main.asm
+Title:       Symboltable
+
+$DL01    0194 	$DL02    019a 	$DL03    01a1 	$DL04    01a8 	
+$DL05    01ca 	$DL06    01dd 	$DL07    01e8 	$DL08    01eb 	
+$DL09    0214 	$DL10    021b 	$DL11    022d 	$DL12    024e 	
+$DL13    0037 	$DL14    0044 	$DL15    004c 	$DL16    0050 	
+$DL17    0057 	$DL18    0066 	$DL19    0085 	$DL20    008f 	
+$DL21    009f 	$DL22    00c2 	$DL23    00c4 	$DL24    00ce 	
+$DL25    00d0 	$DL26    00d5 	$DL27    00ed 	$DL28    00f6 	
+$DL29    010f 	$DL30    0111 	$DL31    0115 	$DL32    012b 	
+$DL33    0131 	$DL34    0133 	$DL35    0139 	$DL36    0152 	
+$DL37    0154 	$DL50    0231 	$DL51    010b 	$DL52    0184 	
+$DLP1    001b 	CB       005a*	CBMTAB   0680 	CLWO     0277 	
+CODTAB   0400 	DADR     06c7 	DIS      0030 	DISLIN   0023 	
+DISSCR   0019 	DIST     01cd 	ED       0142 	ERRO     0256 	
+INAD     025d 	IND      0005 	LOOP     0009 	LPP      000f 	
+M        0010*	MNEPOS   0011 	MNETAB   0300 	N        0020 	
+NL       06a0 	NN       0c4d 	OHNE     00ac 	OP2TAB   0600 	
+OPETAB   0500 	PRAK     02b2 	PRBH     0295 	PRBU     0207 	
+PRBY     02ad 	PRCH     02bf 	PRNB     029c 	PRNN     01fa 	
+PRO1     018b 	PRO2     01ba 	PRTMP    06c5 	PRTSTR   0010 	
+PRVH     0292 	PRWO     0262*	PR_N     01f0 	REGTAB   04f0 	
+SPRTAB   04e0 	STACK    0d4f 	TRBY     0287 	WRKS     06a3 	
+Z80OPS   06c9 	
